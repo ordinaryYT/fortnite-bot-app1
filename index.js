@@ -15,14 +15,10 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
 
-// Store per-user workers
-const workers = {};
+// Single worker reference
+let worker = null;
 
-/**
- * Starts the FNLB worker for a user.
- * Stores stop function to allow stopping later.
- */
-async function startFNLBWorker(userId, category, token) {
+async function startFNLBWorker(category, token) {
   const FNLB = await import('fnlb');
   const fnlb = new FNLB.default();
 
@@ -37,7 +33,7 @@ async function startFNLBWorker(userId, category, token) {
   }
 
   async function restart() {
-    console.log(`[${userId}] Restarting FNLB...`);
+    console.log(`Restarting FNLB...`);
     await fnlb.stop();
     await start();
   }
@@ -45,21 +41,15 @@ async function startFNLBWorker(userId, category, token) {
   await start();
   const interval = setInterval(restart, 3600000); // restart every hour
 
-  // Save references for stopping
-  workers[userId] = {
-    fnlb,
-    interval
-  };
+  worker = { fnlb, interval };
 }
 
-// Stop FNLB worker
-async function stopFNLBWorker(userId) {
-  const w = workers[userId];
-  if (w) {
-    clearInterval(w.interval);
-    await w.fnlb.stop();
-    delete workers[userId];
-    console.log(`[${userId}] Worker stopped`);
+async function stopFNLBWorker() {
+  if (worker) {
+    clearInterval(worker.interval);
+    await worker.fnlb.stop();
+    worker = null;
+    console.log(`Worker stopped`);
     return true;
   }
   return false;
@@ -67,18 +57,17 @@ async function stopFNLBWorker(userId) {
 
 // Start endpoint
 app.post("/start", async (req, res) => {
-  const { userId, category } = req.body;
+  const { category } = req.body;
   const token = process.env.API_TOKEN;
 
-  if (!userId || !category) return res.status(400).json({ error: "userId and category are required" });
-  if (!token) return res.status(500).json({ error: "API_TOKEN missing on server" });
+  if (!category) return res.status(400).json({ error: "Category required" });
+  if (!token) return res.status(500).json({ error: "API_TOKEN missing" });
 
-  // Stop existing worker if running
-  if (workers[userId]) await stopFNLBWorker(userId);
+  if (worker) await stopFNLBWorker();
 
   try {
-    await startFNLBWorker(userId, category, token);
-    res.json({ message: `FNLB worker started for ${userId}`, category });
+    await startFNLBWorker(category, token);
+    res.json({ message: `FNLB worker started in category ${category}` });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to start FNLB worker" });
@@ -87,19 +76,14 @@ app.post("/start", async (req, res) => {
 
 // Stop endpoint
 app.post("/stop", async (req, res) => {
-  const { userId } = req.body;
-  if (!userId) return res.status(400).json({ error: "userId is required" });
-
-  const stopped = await stopFNLBWorker(userId);
-  if (stopped) res.json({ message: `FNLB worker stopped for ${userId}` });
-  else res.json({ message: `No active worker for ${userId}` });
+  const stopped = await stopFNLBWorker();
+  if (stopped) res.json({ message: `FNLB worker stopped` });
+  else res.json({ message: `No active worker` });
 });
 
 // Status endpoint
-app.get("/status/:userId", (req, res) => {
-  const { userId } = req.params;
-  if (workers[userId]) res.json({ running: true });
-  else res.json({ running: false });
+app.get("/status", (req, res) => {
+  res.json({ running: !!worker });
 });
 
 const PORT = process.env.PORT || 10000;
