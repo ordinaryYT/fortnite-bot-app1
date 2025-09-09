@@ -13,112 +13,62 @@
     padding: 0;
     background: #1e1e2f;
     color: #f0f0f0;
-  }
-
-  header {
-    background: #0f1b40;
-    padding: 15px 30px;
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
   }
 
-  header h1 {
-    margin: 0;
-    font-size: 22px;
-    font-weight: 600;
-  }
-
-  header .user {
-    font-weight: 500;
-  }
-
-  nav {
-    background: #1b2860;
-    display: flex;
-  }
-
-  nav button {
-    flex: 1;
-    padding: 12px;
-    font-weight: 600;
-    border: none;
-    cursor: pointer;
-    background: #1b2860;
-    color: #fff;
-    transition: 0.2s;
-  }
-
-  nav button.active, nav button:hover {
-    background: #2a3a80;
-  }
-
-  main {
-    padding: 20px 30px;
-  }
-
-  h2 {
-    margin-top: 0;
-  }
-
-  .bot-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 15px;
-    margin-top: 15px;
-  }
-
-  .bot-card {
+  .container {
+    margin-top: 50px;
     background: #2a2a40;
-    padding: 15px;
-    border-radius: 12px;
-    flex: 1 1 calc(33% - 20px);
+    border-radius: 16px;
+    padding: 30px 40px;
+    width: 400px;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.5);
+  }
+
+  h1 {
     text-align: center;
-    cursor: pointer;
-    transition: 0.2s;
+    margin-bottom: 20px;
+    color: #fff;
   }
 
-  .bot-card:hover {
-    background: #3b3b60;
-  }
-
-  .status-running {
-    color: #4caf50;
+  label {
+    display: block;
+    margin: 15px 0 5px 0;
     font-weight: 600;
   }
 
-  .status-stopped {
-    color: #f44336;
-    font-weight: 600;
-  }
-
-  .category-input {
-    margin-top: 15px;
-  }
-
-  .category-input input {
-    width: calc(100% - 22px);
+  input {
+    width: 100%;
     padding: 10px;
     border-radius: 8px;
     border: none;
+    font-size: 16px;
     margin-bottom: 15px;
   }
 
-  .category-input button {
-    width: 100%;
+  button {
+    width: 48%;
     padding: 10px;
+    margin: 5px 1% 15px 1%;
+    font-size: 16px;
     font-weight: 600;
     border: none;
     border-radius: 8px;
     cursor: pointer;
-    background: #4caf50;
-    color: #fff;
     transition: 0.2s;
   }
 
-  .category-input button:hover {
-    background: #45a049;
-  }
+  button#start { background: #4caf50; color: #fff; }
+  button#start:hover { background: #45a049; }
+
+  button#stop { background: #f44336; color: #fff; }
+  button#stop:hover { background: #e53935; }
+
+  button#status { background: #2196f3; color: #fff; }
+  button#status:hover { background: #1976d2; }
 
   pre {
     background: #121226;
@@ -127,106 +77,69 @@
     overflow-x: auto;
     white-space: pre-wrap;
     word-wrap: break-word;
-    margin-top: 15px;
+  }
+
+  .status {
+    text-align: center;
+    margin-bottom: 15px;
+    font-weight: 600;
   }
 </style>
 </head>
 <body>
-<header>
-  <h1>FNLB Control Panel</h1>
-  <div class="user">OrdinaryYT</div>
-</header>
+  <div class="container">
+    <h1>FNLB Control Panel</h1>
 
-<nav>
-  <button id="homeBtn" class="active" onclick="showPage('home')">Home</button>
-  <button id="myBotsBtn" onclick="showPage('myBots')">My Bots</button>
-  <button id="publicBotsBtn" onclick="showPage('publicBots')">Public Bots</button>
-</nav>
+    <label for="category">Category</label>
+    <input id="category" placeholder="Enter category ID" />
 
-<main>
-  <!-- Home Page -->
-  <div id="home" class="page">
-    <h2>Running Bots</h2>
-    <div class="bot-list" id="runningBots"></div>
+    <div class="status" id="statusDisplay">Status: Unknown</div>
+
+    <button id="start" onclick="start()">Start</button>
+    <button id="stop" onclick="stop()">Stop</button>
+    <button id="statusBtn" onclick="status()">Check Status</button>
+
+    <pre id="output"></pre>
   </div>
 
-  <!-- My Bots Page -->
-  <div id="myBots" class="page" style="display:none;">
-    <h2>My Bots</h2>
-    <div class="bot-list" id="myBotsList"></div>
-  </div>
+  <script>
+    async function start() {
+      const category = document.getElementById("category").value;
+      const res = await fetch("/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category })
+      });
+      const data = await res.json();
+      document.getElementById("output").textContent = JSON.stringify(data, null, 2);
+      updateStatus();
+    }
 
-  <!-- Public Bots Page -->
-  <div id="publicBots" class="page" style="display:none;">
-    <h2>Public Bots</h2>
-    <div class="bot-list" id="publicBotsList"></div>
-  </div>
+    async function stop() {
+      const res = await fetch("/stop", { method: "POST" });
+      const data = await res.json();
+      document.getElementById("output").textContent = JSON.stringify(data, null, 2);
+      updateStatus();
+    }
 
-  <!-- Output logs -->
-  <pre id="output"></pre>
-</main>
+    async function status() {
+      const res = await fetch("/status");
+      const data = await res.json();
+      document.getElementById("output").textContent = JSON.stringify(data, null, 2);
+      updateStatus();
+    }
 
-<script>
-  let runningBots = [];
-  let myBotsHistory = []; // {id, running}
-  const publicBots = Array.from({length:75}, (_, i) => `OGsbot${i+1}`);
+    async function updateStatus() {
+      const res = await fetch("/status");
+      const data = await res.json();
+      const display = document.getElementById("statusDisplay");
+      display.textContent = data.running ? "Status: Running" : "Status: Stopped";
+      display.style.color = data.running ? "#4caf50" : "#f44336";
+    }
 
-  function showPage(page) {
-    document.querySelectorAll('.page').forEach(p => p.style.display='none');
-    document.getElementById(page).style.display='block';
-    document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
-    document.getElementById(page+'Btn').classList.add('active');
-    renderLists();
-  }
-
-  function renderLists() {
-    // Home Page - running bots
-    const rbContainer = document.getElementById('runningBots');
-    rbContainer.innerHTML = '';
-    runningBots.forEach(bot => {
-      const div = document.createElement('div');
-      div.className = 'bot-card';
-      div.textContent = bot;
-      rbContainer.appendChild(div);
-    });
-
-    // My Bots
-    const myContainer = document.getElementById('myBotsList');
-    myContainer.innerHTML = '';
-    myBotsHistory.forEach(bot => {
-      const div = document.createElement('div');
-      div.className = 'bot-card';
-      div.innerHTML = `${bot.id}<br><span class="${bot.running?'status-running':'status-stopped'}">${bot.running?'Running':'Stopped'}</span>`;
-      myContainer.appendChild(div);
-    });
-
-    // Public Bots
-    const pbContainer = document.getElementById('publicBotsList');
-    pbContainer.innerHTML = '';
-    publicBots.forEach(bot => {
-      const div = document.createElement('div');
-      div.className = 'bot-card';
-      div.textContent = bot;
-      pbContainer.appendChild(div);
-    });
-  }
-
-  async function fetchStatus() {
-    // Example: fetch running bots from backend
-    const res = await fetch('/status');
-    const data = await res.json();
-    runningBots = data.running ? ['Bot1','Bot2'] : [];
-    myBotsHistory = [
-      {id:'Bot1', running: runningBots.includes('Bot1')},
-      {id:'Bot2', running: runningBots.includes('Bot2')},
-      {id:'Bot3', running: runningBots.includes('Bot3')}
-    ];
-    renderLists();
-  }
-
-  // Auto-refresh
-  setInterval(fetchStatus, 5000);
-  fetchStatus();
-</script>
+    // Auto-refresh status every 5 seconds
+    setInterval(updateStatus, 5000);
+    updateStatus();
+  </script>
 </body>
 </html>
