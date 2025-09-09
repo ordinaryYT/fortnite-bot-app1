@@ -30,35 +30,32 @@ function timestamp() {
 }
 
 function shouldSkipDumpLine(text) {
-  // If line looks like an object dump or a key:value debug line, return true,
-  // unless it's an error/warn or contains important markers like "Error" or "[!]"
   if (!text || !text.trim()) return true;
 
-  const lowered = text.toLowerCase();
+  // Keep anything with ReplyClient or Bot errors
+  if (/ReplyClient/i.test(text)) return false;
+  if (/\b(error|warn|!|\[!\])\b/i.test(text)) return false;
 
-  // Keep lines that are explicit errors or warnings
-  if (/\berror\b|!\]|\[!\]|^\s*error:/i.test(text)) return false;
-  if (/^\s*\[warn\]/i.test(text)) return false;
-
-  // Indicators of dump/debug data to drop
+  // Skip junk debug dumps
   const dumpIndicators = [
-    /^\s*[{[]/,              // starts with { or [
+    /^\s*[{[]/, // opening brace
+    /^\s*[}\]]\s*,?$/, // closing brace/bracket
     /^\s*ua:/i,
     /^\s*pb:/i,
     /^\s*hotfix:/i,
-    /\bplaylist_/i,
     /^\s*netcl/i,
-    /^\s*playlists?revisions/i,
-    /\bdownloaded metadata\b/i,
-    /\bdownloaded \d+\s*bn\b/i,
-    /\bshard bots:/i,
-    /connecting\s*\(https?:\/\//i
+    /^\s*playlistRevisions:/i,
+    /\bDownloaded metadata\b/i,
+    /\bDownloaded \d+\s*BN\b/i,
+    /\bShard bots:/i,
+    /\bTotal Bots:/i,
+    /\bTotal Categories:/i,
+    /connecting\s*\(https?:\/\//i,
   ];
-
   if (dumpIndicators.some((rx) => rx.test(text))) return true;
 
-  // Also drop plain key:value lines (like "key: value,") except when they contain Error/WARN/!
-  if (/^\s*[A-Za-z0-9_\-]+\s*:\s*.+[,}]?$/.test(text) && !/\b(error|warn|!|\[!\])\b/i.test(text)) {
+  // Generic key:value lines like "foo: bar," (skip unless error/warn/ReplyClient)
+  if (/^\s*[A-Za-z0-9_\-]+\s*:\s*.+[,}]?$/.test(text)) {
     return true;
   }
 
@@ -74,134 +71,83 @@ function broadcastLog(rawMessage) {
     if (!line || !line.trim()) continue;
     let clean = line;
 
-    // 1) Basic sanitization
+    // Sanitize
     clean = clean.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, ""); // ANSI
-    clean = clean.replace(/fnlb/gi, "");                // remove "fnlb" fragments
-    // strip leading generic levels, but keep WARN
+    clean = clean.replace(/fnlb/gi, "");
     clean = clean.replace(/^\s*\[(LOG|INFO|ERROR)\]\s*/i, "");
     clean = clean.replace(/^\s*\[WARN\]\s*/i, "[WARN] ");
 
-    // 2) If the entire raw line looks like a dump, skip it early
-    if (shouldSkipDumpLine(clean)) {
-      // But ensure we don't skip lines that contain clear error/warn markers
-      if (!(/\b(error|warn|!|\[!\])\b/i.test(clean))) continue;
-    }
+    // Skip dumps unless they are ReplyClient/errors
+    if (shouldSkipDumpLine(clean)) continue;
 
-    // 3) Structured parse: "[Source] [IdOrName] rest..."
+    // Remove ✓ and [i], keep [!]
+    clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
+
+    // Structured logs
     const structured = clean.match(/^\s*\[([^\]]+)\]\s*\[([^\]]+)\]\s*(.*)$/);
     if (structured) {
       const source = structured[1].trim();
       const idOrName = structured[2].trim();
       let rest = structured[3].trim();
 
-      // remove internal micro-role tags if present
       rest = rest.replace(/\[\s*(Bot|Client|Gateway|Shard|ShardingManager|ReplyClient)\s*\]/gi, "").trim();
-      // remove small markers ✓ and [i]
-      rest = rest.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
-
-      // If the rest looks like a dump, skip, unless it's an error/warn
-      if (shouldSkipDumpLine(rest) && !(/\b(error|warn|!|\[!\])\b/i.test(rest))) {
-        continue;
-      }
 
       if (/^Bot$/i.test(source) || /^ReplyClient$/i.test(source)) {
-        // Show name in brackets and keep the rest (do NOT strip the trailing bot name — user requested it)
         clean = `[${idOrName}] ${rest}`;
 
       } else if (/^Shard$/i.test(source) || /^Gateway$/i.test(source)) {
-        // Keep ID in brackets and the rest
         clean = `[${idOrName}] ${rest}`;
 
       } else if (/^Client$/i.test(source)) {
-        // Map client messages to OGsbot phrasing
-        if (/setting up/i.test(rest) && /client/i.test(rest)) {
+        if (/setting up/i.test(rest)) {
           clean = `Setting up OGsbot...`;
         } else if (/finished setting up/i.test(rest)) {
-          const remainder = rest.replace(/Client\s*/i, "").trim();
-          clean = `OGsbot ${remainder}`.trim();
+          clean = `OGsbot ${rest.replace(/Client\s*/i, "").trim()}`;
         } else {
-          clean = `OGsbot ${rest}`.trim();
+          clean = `OGsbot ${rest}`;
         }
 
       } else if (/^ShardingManager$/i.test(source)) {
-        // Normalize Start/Stop shard phrasing to bot phrasing
-        // e.g. "Starting shard with ID: 5t8..." -> "Starting bot with ID: [5t8...]"
-        const mId = rest.match(/ID:\s*([^\s,]+)/i);
-        if (mId && mId[1]) {
-          clean = rest.replace(/Starting shard with ID:/i, "Starting bot with ID:").replace(/ID:\s*([^\s,]+)/i, `ID: [${mId[1]}]`);
+        if (/Stopping all active shards/i.test(rest)) {
+          clean = `Stopping all active bots`;
+        } else if (/Stopping shard with ID:/i.test(rest)) {
+          const m = rest.match(/ID:\s*([^\s]+)/i);
+          if (m && m[1]) clean = `Stopping bot with ID: [${m[1]}]`;
+        } else if (/Starting shard with ID:/i.test(rest)) {
+          const m = rest.match(/ID:\s*([^\s]+)/i);
+          if (m && m[1]) clean = `Starting bot with ID: [${m[1]}]`;
+        } else if (/Shard\s+([^\s]+)\s+stopped/i.test(rest)) {
+          const m = rest.match(/Shard\s+([^\s]+)\s+stopped/i);
+          if (m && m[1]) clean = `Bot ${m[1]} stopped`;
         } else {
           clean = rest;
         }
 
       } else {
-        // default: show ID then rest
         clean = `[${idOrName}] ${rest}`;
       }
     } else {
-      // Not structured. remove standalone role tags (if any) and small markers
       clean = clean.replace(/\[\s*(Bot|Client|Gateway|Shard|ShardingManager|ReplyClient)\s*\]/gi, "").trim();
       clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
-
-      // If this non-structured line now looks like a dump, skip it (unless it's an error/warn)
-      if (shouldSkipDumpLine(clean) && !(/\b(error|warn|!|\[!\])\b/i.test(clean))) {
-        continue;
-      }
     }
 
-    // 4) Specific phrase transforms related to "shard" -> "bot" for stop/start wording
-    // Stopping all active shards -> Stopping all active bots
-    clean = clean.replace(/\bStopping all active shards\b/ig, "Stopping all active bots");
-
-    // Stopping shard with ID: 5t8... -> Stopping bot with ID: [5t8...]
-    clean = clean.replace(/\bStopping shard with ID:\s*([^\s\]]+)/ig, (m, id) => `Stopping bot with ID: [${id}]`);
-
-    // Starting shard with ID: 5t8... -> Starting bot with ID: [5t8...]
-    clean = clean.replace(/\bStarting shard with ID:\s*([^\s\]]+)/ig, (m, id) => `Starting bot with ID: [${id}]`);
-
-    // Shard <id> stopped. -> Bot <id> stopped.
-    clean = clean.replace(/\bShard\s+([^\s,]+)\s+stopped\b/ig, (m, id) => `Bot ${id} stopped`);
-
-    // 5) Additional targeted suppressions requested:
-    // - "Downloaded X BN" lines & "Downloaded metadata" already caught, but double-ensure:
-    if (/\bDownloaded \d+\s*BN\b/i.test(clean) || /\bDownloaded metadata\b/i.test(clean)) continue;
-
-    // - "Shard bots: ..." lines
-    if (/\bShard bots:/i.test(clean) || /\bTotal Bots:/i.test(clean) || /\bTotal Categories:/i.test(clean)) {
-      // remove shard-bots summary lines
-      continue;
-    }
-
-    // - "Connecting (https://...)" lines
-    if (/Connecting\s*\(https?:\/\//i.test(clean)) continue;
-
-    // 6) Final cleanups
     clean = clean.replace(/\s{2,}/g, " ").trim();
     if (!clean) continue;
 
-    // Prepend timestamp and emit
     const out = `[${timestamp()}] ${clean}`;
     logListeners.forEach((res) => {
       try {
         res.write(`data: ${out}\n\n`);
-      } catch (e) {
-        // ignore write errors
-      }
+      } catch {}
     });
-  } // for each line
+  }
 }
 
-// console wrappers
 function wrapConsole(method) {
   return (...args) => {
-    const processed = args.map((a) => {
-      if (a instanceof Error) return a.stack || String(a);
-      if (a && typeof a === "object") {
-        try { return JSON.stringify(a); } catch { return String(a); }
-      }
-      return String(a);
-    }).join(" ");
+    const msg = args.map((a) => (typeof a === "object" ? JSON.stringify(a) : String(a))).join(" ");
     original[method](...args);
-    broadcastLog(processed);
+    broadcastLog(msg);
   };
 }
 
@@ -215,7 +161,7 @@ process.stdout.write = (chunk, encoding, callback) => {
   broadcastLog(chunk);
 };
 
-// --- Worker functions ---
+// Worker
 async function startWorker(category, token) {
   const FNLB = await import("fnlb");
   const fnlb = new FNLB.default();
@@ -232,7 +178,7 @@ async function startWorker(category, token) {
 
   async function restart() {
     console.log("Restarting worker...");
-    try { await fnlb.stop(); } catch (e) { console.warn("Error stopping fnlb:", e); }
+    try { await fnlb.stop(); } catch {}
     await start();
   }
 
@@ -244,7 +190,7 @@ async function startWorker(category, token) {
 async function stopWorker() {
   if (worker) {
     clearInterval(worker.interval);
-    try { await worker.fnlb.stop(); } catch (e) { console.warn("Error stopping worker:", e); }
+    try { await worker.fnlb.stop(); } catch {}
     worker = null;
     console.log("Worker stopped");
     return true;
@@ -252,7 +198,7 @@ async function stopWorker() {
   return false;
 }
 
-// --- API endpoints ---
+// API
 app.post("/start", async (req, res) => {
   const { category } = req.body;
   const token = process.env.API_TOKEN;
