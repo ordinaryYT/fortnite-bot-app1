@@ -1,51 +1,145 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>FNLB Control</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FNLB Control Panel</title>
 <style>
-body { font-family: sans-serif; padding: 20px; }
-label { display: block; margin: 10px 0; }
-button { margin: 5px 5px 15px 0; padding: 6px 12px; }
-pre { background: #f4f4f4; padding: 10px; border-radius: 6px; }
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
+
+  body {
+    font-family: 'Inter', sans-serif;
+    margin: 0;
+    padding: 0;
+    background: #1e1e2f;
+    color: #f0f0f0;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+  }
+
+  .container {
+    margin-top: 50px;
+    background: #2a2a40;
+    border-radius: 16px;
+    padding: 30px 40px;
+    width: 400px;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.5);
+  }
+
+  h1 {
+    text-align: center;
+    margin-bottom: 20px;
+    color: #fff;
+  }
+
+  label {
+    display: block;
+    margin: 15px 0 5px 0;
+    font-weight: 600;
+  }
+
+  input {
+    width: 100%;
+    padding: 10px;
+    border-radius: 8px;
+    border: none;
+    font-size: 16px;
+    margin-bottom: 15px;
+  }
+
+  button {
+    width: 48%;
+    padding: 10px;
+    margin: 5px 1% 15px 1%;
+    font-size: 16px;
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: 0.2s;
+  }
+
+  button#start { background: #4caf50; color: #fff; }
+  button#start:hover { background: #45a049; }
+
+  button#stop { background: #f44336; color: #fff; }
+  button#stop:hover { background: #e53935; }
+
+  button#status { background: #2196f3; color: #fff; }
+  button#status:hover { background: #1976d2; }
+
+  pre {
+    background: #121226;
+    padding: 15px;
+    border-radius: 8px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+
+  .status {
+    text-align: center;
+    margin-bottom: 15px;
+    font-weight: 600;
+  }
 </style>
 </head>
 <body>
-<h1>FNLB Control</h1>
-<label>User ID: <input id="userId" /></label>
-<label>Category: <input id="category" /></label>
-<button onclick="start()">Start</button>
-<button onclick="stop()">Stop</button>
-<button onclick="status()">Check Status</button>
-<pre id="output"></pre>
+  <div class="container">
+    <h1>FNLB Control Panel</h1>
 
-<script>
-async function start() {
-  const userId = document.getElementById("userId").value;
-  const category = document.getElementById("category").value;
-  const res = await fetch("/start", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId, category })
-  });
-  document.getElementById("output").textContent = JSON.stringify(await res.json(), null, 2);
-}
+    <label for="category">Category</label>
+    <input id="category" placeholder="Enter category ID" />
 
-async function stop() {
-  const userId = document.getElementById("userId").value;
-  const res = await fetch("/stop", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId })
-  });
-  document.getElementById("output").textContent = JSON.stringify(await res.json(), null, 2);
-}
+    <div class="status" id="statusDisplay">Status: Unknown</div>
 
-async function status() {
-  const userId = document.getElementById("userId").value;
-  const res = await fetch(`/status/${userId}`);
-  document.getElementById("output").textContent = JSON.stringify(await res.json(), null, 2);
-}
-</script>
+    <button id="start" onclick="start()">Start</button>
+    <button id="stop" onclick="stop()">Stop</button>
+    <button id="statusBtn" onclick="status()">Check Status</button>
+
+    <pre id="output"></pre>
+  </div>
+
+  <script>
+    async function start() {
+      const category = document.getElementById("category").value;
+      const res = await fetch("/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category })
+      });
+      const data = await res.json();
+      document.getElementById("output").textContent = JSON.stringify(data, null, 2);
+      updateStatus();
+    }
+
+    async function stop() {
+      const res = await fetch("/stop", { method: "POST" });
+      const data = await res.json();
+      document.getElementById("output").textContent = JSON.stringify(data, null, 2);
+      updateStatus();
+    }
+
+    async function status() {
+      const res = await fetch("/status");
+      const data = await res.json();
+      document.getElementById("output").textContent = JSON.stringify(data, null, 2);
+      updateStatus();
+    }
+
+    async function updateStatus() {
+      const res = await fetch("/status");
+      const data = await res.json();
+      const display = document.getElementById("statusDisplay");
+      display.textContent = data.running ? "Status: Running" : "Status: Stopped";
+      display.style.color = data.running ? "#4caf50" : "#f44336";
+    }
+
+    // Auto-refresh status every 5 seconds
+    setInterval(updateStatus, 5000);
+    updateStatus();
+  </script>
 </body>
 </html>
