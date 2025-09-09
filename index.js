@@ -37,19 +37,39 @@ function broadcastLog(message) {
 
   let clean = message;
 
-  // Remove "fnlb"
+  // 1. Remove ANSI color codes
+  clean = clean.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "");
+
+  // 2. Remove "fnlb"
   clean = clean.replace(/fnlb/gi, "");
 
-  // Remove standard log tags
+  // 3. Remove standard log tags [LOG] [INFO] [WARN] [ERROR]
   clean = clean.replace(/^\[(LOG|INFO|WARN|ERROR)\]\s*/i, "");
 
-  // Remove [Bot] [something] [✓]
-  clean = clean.replace(/\[Bot\]\s*\[[^\]]+\]\s*\[✓\]\s*/gi, "");
+  // 4. Skip unwanted noise logs
+  const skipPatterns = [
+    /Downloading\s*\.\.\./i,
+    /Finished loading/i,
+    /Starting shard/i,
+    /Setting up\s*\.\.\./i,
+    /Downloaded \d+ BN/i,
+    /Downloaded metadata/i,
+    /Adding \d+ shard bots/i,
+    /Bot added to system/i,
+    /Downloading cosmetics/i,
+    /Finished downloading cosmetics/i,
+  ];
+  if (skipPatterns.some((p) => p.test(clean))) {
+    return;
+  }
 
-  // Remove client/replyclient/cosmetic manager tags but keep message
-  clean = clean.replace(/\b(client|replyclient|cosmetic manager)\b/gi, "");
+  // 5. Strip [Bot] / [ReplyClient] prefixes but keep messages
+  clean = clean.replace(/^\[(Bot|ReplyClient)\]\s*\[[^\]]+\]\s*/i, "");
 
-  // Cleanup extra spaces
+  // 6. Remove ✓ and [i], but KEEP [!]
+  clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "");
+
+  // 7. Cleanup whitespace
   clean = clean.trim();
   if (!clean) return;
 
@@ -71,7 +91,7 @@ console.info = wrapConsole("info");
 console.warn = wrapConsole("warn");
 console.error = wrapConsole("error");
 
-// Intercept stdout writes (catches anything FNLB might print directly)
+// Intercept stdout writes
 process.stdout.write = (chunk, encoding, callback) => {
   const msg = chunk.toString();
   originalWrite(chunk, encoding, callback);
