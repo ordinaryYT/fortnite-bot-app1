@@ -40,7 +40,7 @@ function broadcastLog(message) {
   // 1. Remove ANSI color codes
   clean = clean.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "");
 
-  // 2. Remove "fnlb"
+  // 2. Remove fnlb
   clean = clean.replace(/fnlb/gi, "");
 
   // 3. Remove [LOG], [INFO], [WARN], [ERROR]
@@ -59,7 +59,7 @@ function broadcastLog(message) {
   ];
   if (skipPatterns.some((p) => p.test(clean))) return;
 
-  // 5. Normalize log formats
+  // 5. Normalize structured logs: [Source] [IdOrName] Rest...
   const match = clean.match(/^\[([^\]]+)\]\s*\[([^\]]+)\]\s*(.*)$/);
   if (match) {
     const source = match[1].trim();
@@ -67,7 +67,7 @@ function broadcastLog(message) {
     let rest = match[3].trim();
 
     if (/^Bot$/i.test(source) || /^ReplyClient$/i.test(source)) {
-      // Keep bot name, drop duplicate in message if present
+      // Show bot name
       clean = `${idOrName} ${rest.replace(new RegExp(idOrName, "gi"), "").trim()}`;
     } else if (/^Shard$/i.test(source) || /^Gateway$/i.test(source)) {
       // Show ID in brackets
