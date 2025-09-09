@@ -31,7 +31,6 @@ function timestamp() {
 
 function broadcastLog(rawMessage) {
   if (!rawMessage && rawMessage !== 0) return;
-
   let message = String(rawMessage);
   const lines = message.split(/\r?\n/);
 
@@ -39,25 +38,32 @@ function broadcastLog(rawMessage) {
     if (!line || !line.trim()) continue;
     let clean = line;
 
-    // Remove ANSI codes, fnlb, log level tags
+    // Remove ANSI, fnlb, log level tags
     clean = clean.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "");
     clean = clean.replace(/fnlb/gi, "");
-    clean = clean.replace(/^\s*\[(LOG|INFO|WARN|ERROR)\]\s*/i, "");
+    clean = clean.replace(/^\s*\[(LOG|INFO|ERROR)\]\s*/i, "");
+    // ⚠️ Keep WARN
+    clean = clean.replace(/^\s*\[WARN\]\s*/i, "[WARN] ");
 
-    // Skip noisy cosmetic stuff
-    const skipPatterns = [
-      /Downloading\s*\.\.\./i,
-      /Finished loading/i,
-      /Downloaded \d+ BN/i,
-      /Downloaded metadata/i,
-      /Adding \d+ shard bots/i,
-      /Bot added to system/i,
-      /Downloading cosmetics/i,
-      /Finished downloading cosmetics/i,
-    ];
-    if (skipPatterns.some((p) => p.test(clean))) continue;
+    // 🚫 Skip unwanted debug/object dumps
+    if (
+      /^\s*[{]/.test(clean) ||               // opening {
+      /^\s*[}\]]\s*,?$/.test(clean) ||       // closing } ]
+      /^\s*\w+\s*:\s*.+[,}]?$/.test(clean) ||// key:value style
+      /playlist_/i.test(clean) ||            // playlist dumps
+      /^\s*ua:/i.test(clean) ||
+      /^\s*pb:/i.test(clean) ||
+      /^\s*hotfix:/i.test(clean) ||
+      /^\s*netCL/i.test(clean) ||
+      /^\s*playlistRevisions:/i.test(clean)
+    ) {
+      continue;
+    }
 
-    // Parse structured [Source] [IdOrName] Rest
+    // Remove ✓ and [i], keep [!]
+    clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
+
+    // Structured handling
     const structured = clean.match(/^\s*\[([^\]]+)\]\s*\[([^\]]+)\]\s*(.*)$/);
     if (structured) {
       const source = structured[1].trim();
@@ -65,7 +71,6 @@ function broadcastLog(rawMessage) {
       let rest = structured[3].trim();
 
       rest = rest.replace(/\[\s*(Bot|Client|Gateway|Shard|ShardingManager|ReplyClient)\s*\]/gi, "").trim();
-      rest = rest.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
 
       if (/^Bot$/i.test(source) || /^ReplyClient$/i.test(source)) {
         clean = `[${idOrName}] ${rest}`;
