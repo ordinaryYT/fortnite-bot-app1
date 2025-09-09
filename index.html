@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>FNLB Control Panel</title>
+  <title>Control Panel</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -53,9 +53,7 @@
       background: #4caf50;
     }
 
-    .hidden {
-      display: none;
-    }
+    .hidden { display: none; }
 
     label {
       display: block;
@@ -117,9 +115,7 @@
       border-bottom: 1px solid #444;
     }
 
-    .bot-item:last-child {
-      border-bottom: none;
-    }
+    .bot-item:last-child { border-bottom: none; }
 
     .running {
       color: #4caf50;
@@ -129,7 +125,7 @@
 </head>
 <body>
   <div class="container">
-    <h1>FNLB Control Panel</h1>
+    <h1>Control Panel</h1>
 
     <!-- Tabs -->
     <div class="tabs">
@@ -174,7 +170,6 @@
       document.getElementById("public-view").classList.add("hidden");
       document.getElementById("mybots-view").classList.add("hidden");
       document.getElementById("account-view").classList.add("hidden");
-
       document.getElementById(view + "-view").classList.remove("hidden");
 
       document.querySelectorAll(".tabs button").forEach(btn => btn.classList.remove("active"));
@@ -184,7 +179,7 @@
     // Logs
     function appendLog(data) {
       const output = document.getElementById("output");
-      output.textContent += JSON.stringify(data, null, 2) + "\n\n";
+      output.textContent += data + "\n";
       output.scrollTop = output.scrollHeight;
     }
 
@@ -201,21 +196,21 @@
         body: JSON.stringify({ category })
       });
       const data = await res.json();
-      appendLog(data);
+      appendLog(JSON.stringify(data, null, 2));
       updateStatus();
     }
 
     async function stop() {
       const res = await fetch("/stop", { method: "POST" });
       const data = await res.json();
-      appendLog(data);
+      appendLog(JSON.stringify(data, null, 2));
       updateStatus();
     }
 
     async function status() {
       const res = await fetch("/status");
       const data = await res.json();
-      appendLog(data);
+      appendLog(JSON.stringify(data, null, 2));
       updateStatus();
     }
 
@@ -227,7 +222,7 @@
       display.style.color = data.running ? "#4caf50" : "#f44336";
     }
 
-    // Build OGsbot1-75 list
+    // Public bots
     function buildPublicBots() {
       const container = document.getElementById("botList");
       for (let i = 1; i <= 75; i++) {
@@ -238,10 +233,19 @@
       }
     }
 
+    // Live log stream from backend
+    function initLogStream() {
+      const source = new EventSource("/logs");
+      source.onmessage = (event) => {
+        appendLog(event.data);
+      };
+    }
+
     // Init
     buildPublicBots();
     updateStatus();
     setInterval(updateStatus, 5000);
+    initLogStream();
     showView("public");
   </script>
 </body>
