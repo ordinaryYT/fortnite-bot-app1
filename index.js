@@ -9,11 +9,15 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, "public")));
+
+// serve index.html directly
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
+});
 
 const workers = {}; // userId -> worker session
 
-// Fake worker class (replace with your real library)
+// Dummy worker class (replace with your own library logic)
 class Worker {
   constructor(userId, category, token) {
     this.userId = userId;
@@ -23,7 +27,7 @@ class Worker {
   }
 
   async start() {
-    console.log(`▶️ Worker for ${this.userId} started (category: ${this.category}) with token ${this.token.slice(0, 6)}...`);
+    console.log(`▶️ Worker for ${this.userId} started (category: ${this.category}) with token ${this.token.slice(0,6)}...`);
     this.interval = setInterval(() => {
       console.log(`[${this.userId}] still running in category ${this.category}`);
     }, 10000);
@@ -37,7 +41,6 @@ class Worker {
   }
 }
 
-// Start worker
 app.post("/start", async (req, res) => {
   const { userId, category } = req.body;
   if (!userId || !category) {
@@ -46,10 +49,9 @@ app.post("/start", async (req, res) => {
 
   const token = process.env.API_TOKEN;
   if (!token) {
-    return res.status(500).json({ error: "API_TOKEN not set on server" });
+    return res.status(500).json({ error: "API_TOKEN not set" });
   }
 
-  // Stop existing worker if exists
   if (workers[userId]) {
     await workers[userId].stop();
     delete workers[userId];
@@ -62,7 +64,6 @@ app.post("/start", async (req, res) => {
   res.json({ message: `Worker started for ${userId}`, category });
 });
 
-// Stop worker
 app.post("/stop", async (req, res) => {
   const { userId } = req.body;
   if (!userId) {
@@ -78,7 +79,6 @@ app.post("/stop", async (req, res) => {
   }
 });
 
-// Status
 app.get("/status/:userId", (req, res) => {
   const { userId } = req.params;
   if (workers[userId]) {
