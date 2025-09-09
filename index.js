@@ -34,7 +34,25 @@ function timestamp() {
 
 function broadcastLog(message) {
   if (!message || !message.trim()) return;
-  const clean = message.replace(/fnlb/gi, ""); // strip "fnlb"
+
+  let clean = message;
+
+  // Remove "fnlb"
+  clean = clean.replace(/fnlb/gi, "");
+
+  // Remove standard log tags
+  clean = clean.replace(/^\[(LOG|INFO|WARN|ERROR)\]\s*/i, "");
+
+  // Remove [Bot] [something] [✓]
+  clean = clean.replace(/\[Bot\]\s*\[[^\]]+\]\s*\[✓\]\s*/gi, "");
+
+  // Remove client/replyclient/cosmetic manager tags but keep message
+  clean = clean.replace(/\b(client|replyclient|cosmetic manager)\b/gi, "");
+
+  // Cleanup extra spaces
+  clean = clean.trim();
+  if (!clean) return;
+
   const line = `[${timestamp()}] ${clean}`;
   logListeners.forEach((res) => res.write(`data: ${line}\n\n`));
 }
