@@ -1,54 +1,51 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <title>Worker Control</title>
-  <style>
-    body { font-family: sans-serif; padding: 20px; }
-    label { display: block; margin: 10px 0; }
-    button { margin: 5px 5px 15px 0; padding: 6px 12px; }
-    pre { background: #f4f4f4; padding: 10px; border-radius: 6px; }
-  </style>
+<meta charset="UTF-8">
+<title>FNLB Control</title>
+<style>
+body { font-family: sans-serif; padding: 20px; }
+label { display: block; margin: 10px 0; }
+button { margin: 5px 5px 15px 0; padding: 6px 12px; }
+pre { background: #f4f4f4; padding: 10px; border-radius: 6px; }
+</style>
 </head>
 <body>
-  <h1>Worker Control</h1>
-  <label>User ID: <input id="userId" /></label>
-  <label>Category: <input id="category" /></label>
-  <button onclick="start()">Start</button>
-  <button onclick="stop()">Stop</button>
-  <button onclick="status()">Check Status</button>
-  <pre id="output"></pre>
+<h1>FNLB Control</h1>
+<label>User ID: <input id="userId" /></label>
+<label>Category: <input id="category" /></label>
+<button onclick="start()">Start</button>
+<button onclick="stop()">Stop</button>
+<button onclick="status()">Check Status</button>
+<pre id="output"></pre>
 
-  <script>
-    async function start() {
-      const userId = document.getElementById("userId").value;
-      const category = document.getElementById("category").value;
-      const res = await fetch("/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, category })
-      });
-      const data = await res.json();
-      document.getElementById("output").textContent = JSON.stringify(data, null, 2);
-    }
+<script>
+async function start() {
+  const userId = document.getElementById("userId").value;
+  const category = document.getElementById("category").value;
+  const res = await fetch("/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, category })
+  });
+  document.getElementById("output").textContent = JSON.stringify(await res.json(), null, 2);
+}
 
-    async function stop() {
-      const userId = document.getElementById("userId").value;
-      const res = await fetch("/stop", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId })
-      });
-      const data = await res.json();
-      document.getElementById("output").textContent = JSON.stringify(data, null, 2);
-    }
+async function stop() {
+  const userId = document.getElementById("userId").value;
+  const res = await fetch("/stop", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId })
+  });
+  document.getElementById("output").textContent = JSON.stringify(await res.json(), null, 2);
+}
 
-    async function status() {
-      const userId = document.getElementById("userId").value;
-      const res = await fetch(`/status/${userId}`);
-      const data = await res.json();
-      document.getElementById("output").textContent = JSON.stringify(data, null, 2);
-    }
-  </script>
+async function status() {
+  const userId = document.getElementById("userId").value;
+  const res = await fetch(`/status/${userId}`);
+  document.getElementById("output").textContent = JSON.stringify(await res.json(), null, 2);
+}
+</script>
 </body>
 </html>
