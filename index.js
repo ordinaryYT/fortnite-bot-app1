@@ -37,21 +37,17 @@ function broadcastLog(message) {
 
   let clean = message;
 
-  // 1. Remove ANSI color codes
+  // Remove ANSI color codes
   clean = clean.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "");
-
-  // 2. Remove "fnlb"
+  // Remove fnlb
   clean = clean.replace(/fnlb/gi, "");
-
-  // 3. Remove standard log tags [LOG] [INFO] [WARN] [ERROR]
+  // Remove standard log tags
   clean = clean.replace(/^\[(LOG|INFO|WARN|ERROR)\]\s*/i, "");
 
-  // 4. Skip unwanted noise logs
+  // Skip noise
   const skipPatterns = [
     /Downloading\s*\.\.\./i,
     /Finished loading/i,
-    /Starting shard/i,
-    /Setting up\s*\.\.\./i,
     /Downloaded \d+ BN/i,
     /Downloaded metadata/i,
     /Adding \d+ shard bots/i,
@@ -59,17 +55,35 @@ function broadcastLog(message) {
     /Downloading cosmetics/i,
     /Finished downloading cosmetics/i,
   ];
-  if (skipPatterns.some((p) => p.test(clean))) {
-    return;
+  if (skipPatterns.some((p) => p.test(clean))) return;
+
+  // Match [Source] [NameOrId] Message
+  const match = clean.match(/^\[([^\]]+)\]\s*\[([^\]]+)\]\s*(.*)$/);
+  if (match) {
+    const source = match[1];
+    let nameOrId = match[2];
+    let rest = match[3];
+
+    if (/^(Bot|ReplyClient)$/i.test(source)) {
+      // Keep bot name
+      clean = `${nameOrId} ${rest}`;
+    } else if (/^Shard$/i.test(source) || /^Gateway$/i.test(source)) {
+      // Keep ID in [id] form
+      clean = `[${nameOrId}] ${rest}`;
+    } else if (/^Client$/i.test(source)) {
+      // Special replacement with OGsbot
+      if (/Setting up/i.test(rest)) {
+        clean = `Setting up OGsbot...`;
+      } else if (/finished setting up/i.test(rest)) {
+        clean = `OGsbot ${rest.replace(/Client\s*/i, "").trim()}`;
+      } else {
+        clean = `OGsbot ${rest}`;
+      }
+    }
   }
 
-  // 5. Strip [Bot] / [ReplyClient] prefixes but keep messages
-  clean = clean.replace(/^\[(Bot|ReplyClient)\]\s*\[[^\]]+\]\s*/i, "");
-
-  // 6. Remove ✓ and [i], but KEEP [!]
+  // Strip ✓ and [i], keep [!]
   clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "");
-
-  // 7. Cleanup whitespace
   clean = clean.trim();
   if (!clean) return;
 
@@ -91,7 +105,7 @@ console.info = wrapConsole("info");
 console.warn = wrapConsole("warn");
 console.error = wrapConsole("error");
 
-// Intercept stdout writes
+// Intercept stdout
 process.stdout.write = (chunk, encoding, callback) => {
   const msg = chunk.toString();
   originalWrite(chunk, encoding, callback);
@@ -120,7 +134,7 @@ async function startWorker(category, token) {
   }
 
   await start();
-  const interval = setInterval(restart, 3600000); // restart every hour
+  const interval = setInterval(restart, 3600000);
   worker = { fnlb, interval };
 }
 
