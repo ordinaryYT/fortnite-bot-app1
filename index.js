@@ -20,14 +20,43 @@ let worker = null;
 let logListeners = [];
 
 // --- Log interception ---
-const originalLog = console.log;
-function broadcastLog(message) {
-  const clean = message.replace(/fnlb/gi, ""); // remove "fnlb"
-  logListeners.forEach((res) => res.write(`data: ${clean}\n\n`));
+const original = {
+  log: console.log,
+  info: console.info,
+  warn: console.warn,
+  error: console.error,
+};
+const originalWrite = process.stdout.write.bind(process.stdout);
+
+function timestamp() {
+  return new Date().toISOString().split("T")[1].split(".")[0]; // HH:MM:SS
 }
-console.log = (...args) => {
-  const msg = args.join(" ");
-  originalLog(msg);
+
+function broadcastLog(message) {
+  if (!message || !message.trim()) return;
+  const clean = message.replace(/fnlb/gi, ""); // strip "fnlb"
+  const line = `[${timestamp()}] ${clean}`;
+  logListeners.forEach((res) => res.write(`data: ${line}\n\n`));
+}
+
+function wrapConsole(method) {
+  return (...args) => {
+    const msg = args.join(" ");
+    original[method](msg);
+    broadcastLog(`[${method.toUpperCase()}] ${msg}`);
+  };
+}
+
+// Replace console methods
+console.log = wrapConsole("log");
+console.info = wrapConsole("info");
+console.warn = wrapConsole("warn");
+console.error = wrapConsole("error");
+
+// Intercept stdout writes (catches anything FNLB might print directly)
+process.stdout.write = (chunk, encoding, callback) => {
+  const msg = chunk.toString();
+  originalWrite(chunk, encoding, callback);
   broadcastLog(msg);
 };
 
