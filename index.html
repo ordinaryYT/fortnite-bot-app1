@@ -1,145 +1,183 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FNLB Control Panel</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
-
-  body {
-    font-family: 'Inter', sans-serif;
-    margin: 0;
-    padding: 0;
-    background: #1e1e2f;
-    color: #f0f0f0;
-    display: flex;
-    justify-content: center;
-    align-items: flex-start;
-    min-height: 100vh;
-  }
-
-  .container {
-    margin-top: 50px;
-    background: #2a2a40;
-    border-radius: 16px;
-    padding: 30px 40px;
-    width: 400px;
-    box-shadow: 0 8px 25px rgba(0,0,0,0.5);
-  }
-
-  h1 {
-    text-align: center;
-    margin-bottom: 20px;
-    color: #fff;
-  }
-
-  label {
-    display: block;
-    margin: 15px 0 5px 0;
-    font-weight: 600;
-  }
-
-  input {
-    width: 100%;
-    padding: 10px;
-    border-radius: 8px;
-    border: none;
-    font-size: 16px;
-    margin-bottom: 15px;
-  }
-
-  button {
-    width: 48%;
-    padding: 10px;
-    margin: 5px 1% 15px 1%;
-    font-size: 16px;
-    font-weight: 600;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: 0.2s;
-  }
-
-  button#start { background: #4caf50; color: #fff; }
-  button#start:hover { background: #45a049; }
-
-  button#stop { background: #f44336; color: #fff; }
-  button#stop:hover { background: #e53935; }
-
-  button#status { background: #2196f3; color: #fff; }
-  button#status:hover { background: #1976d2; }
-
-  pre {
-    background: #121226;
-    padding: 15px;
-    border-radius: 8px;
-    overflow-x: auto;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-  }
-
-  .status {
-    text-align: center;
-    margin-bottom: 15px;
-    font-weight: 600;
-  }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FNLB - Bot Management Platform</title>
+  <style>
+    /* keep your full dashboard CSS here (same as before) */
+  </style>
 </head>
 <body>
-  <div class="container">
-    <h1>FNLB Control Panel</h1>
+  <!-- Header -->
+  <header class="header">
+    <div class="logo-section">
+      <button class="menu-btn">
+        <svg class="icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="4" x2="20" y1="6" y2="6"/>
+          <line x1="4" x2="20" y1="12" y2="12"/>
+          <line x1="4" x2="20" y1="18" y2="18"/>
+        </svg>
+      </button>
+      <div class="logo">
+        <div class="logo-icon">FN</div>
+        <span class="logo-text">LB</span>
+      </div>
+    </div>
+  </header>
 
-    <label for="category">Category</label>
-    <input id="category" placeholder="Enter category ID" />
+  <div class="main-container">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <button class="nav-button active" onclick="showView('public')">Public Bots</button>
+      <button class="nav-button" onclick="showView('my-bots')">My Bots</button>
+      <button class="nav-button" onclick="showView('account')">My Account</button>
+    </div>
 
-    <div class="status" id="statusDisplay">Status: Unknown</div>
+    <!-- Content -->
+    <div class="content">
+      <div class="content-inner">
+        <!-- Public Bots -->
+        <div id="public-view">
+          <div class="page-header">
+            <h1>Public Bots</h1>
+            <p>Discover and use community bots</p>
+          </div>
+          <!-- (cards unchanged) -->
+        </div>
 
-    <button id="start" onclick="start()">Start</button>
-    <button id="stop" onclick="stop()">Stop</button>
-    <button id="statusBtn" onclick="status()">Check Status</button>
+        <!-- My Bots -->
+        <div id="my-bots-view" class="hidden">
+          <div class="header-with-actions">
+            <div>
+              <h1>My Bots</h1>
+              <p>Manage your personal bots</p>
+            </div>
+            <div class="actions">
+              <button class="btn btn-success" onclick="startAllBots()">Start All</button>
+              <button class="btn btn-danger" onclick="stopAllBots()">Stop All</button>
+            </div>
+          </div>
 
-    <pre id="output"></pre>
+          <!-- Category Input -->
+          <div style="margin-bottom: 1rem;">
+            <label for="categoryInput">Category ID:</label>
+            <input id="categoryInput" placeholder="Enter category ID" style="padding:0.5rem; border-radius:0.375rem; border:none; width:100%; max-width:300px;" />
+          </div>
+
+          <h2 class="section-title">Trading</h2>
+          <div class="grid">
+            <div class="card" id="trading-bot-1" onclick="toggleBotControls('trading-bot-1')">
+              <div class="card-header">
+                <div class="icon-container">
+                  <svg class="icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 8V4H8"/>
+                    <rect width="16" height="12" x="4" y="8" rx="2"/>
+                  </svg>
+                </div>
+                <div class="bot-info">
+                  <h3>Trading Bot Alpha</h3>
+                  <div class="status">
+                    <span class="status-dot stopped" id="status-dot-trading-bot-1"></span>
+                    <span id="status-text-trading-bot-1">Stopped</span>
+                  </div>
+                </div>
+              </div>
+              <p class="card-description">Automated trading bot for cryptocurrency markets</p>
+              <div class="bot-controls" id="controls-trading-bot-1">
+                <button class="btn btn-success btn-sm" id="start-btn-trading-bot-1" onclick="toggleBot('trading-bot-1',event)">Start</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Account (unchanged) -->
+        <div id="account-view" class="hidden">
+          <!-- account cards here -->
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
-    async function start() {
-      const category = document.getElementById("category").value;
+    // View switching
+    function showView(viewName) {
+      document.querySelectorAll('[id$="-view"]').forEach(v => v.classList.add('hidden'));
+      document.getElementById(viewName + '-view').classList.remove('hidden');
+      document.querySelectorAll('.nav-button').forEach(btn => btn.classList.remove('active'));
+      event.target.classList.add('active');
+    }
+
+    // Backend integration
+    async function startBot(category) {
+      if (!category) {
+        alert("Please enter a category ID first.");
+        return;
+      }
       const res = await fetch("/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ category })
       });
-      const data = await res.json();
-      document.getElementById("output").textContent = JSON.stringify(data, null, 2);
-      updateStatus();
+      await res.json();
+      updateAllStatuses();
     }
 
-    async function stop() {
-      const res = await fetch("/stop", { method: "POST" });
-      const data = await res.json();
-      document.getElementById("output").textContent = JSON.stringify(data, null, 2);
-      updateStatus();
+    async function stopBot() {
+      await fetch("/stop", { method: "POST" });
+      updateAllStatuses();
     }
 
-    async function status() {
+    async function getStatus() {
       const res = await fetch("/status");
-      const data = await res.json();
-      document.getElementById("output").textContent = JSON.stringify(data, null, 2);
-      updateStatus();
+      return await res.json();
     }
 
-    async function updateStatus() {
-      const res = await fetch("/status");
-      const data = await res.json();
-      const display = document.getElementById("statusDisplay");
-      display.textContent = data.running ? "Status: Running" : "Status: Stopped";
-      display.style.color = data.running ? "#4caf50" : "#f44336";
+    // My Bots controls
+    function toggleBotControls(botId) {
+      document.getElementById('controls-' + botId).classList.toggle('show');
     }
 
-    // Auto-refresh status every 5 seconds
-    setInterval(updateStatus, 5000);
-    updateStatus();
+    async function toggleBot(botId, event) {
+      event.stopPropagation();
+      const category = document.getElementById("categoryInput").value;
+      const current = await getStatus();
+      if (current.running) {
+        await stopBot();
+      } else {
+        await startBot(category);
+      }
+    }
+
+    async function startAllBots() {
+      const category = document.getElementById("categoryInput").value;
+      await startBot(category);
+    }
+
+    async function stopAllBots() {
+      await stopBot();
+    }
+
+    // Update UI from backend status
+    async function updateAllStatuses() {
+      const status = await getStatus();
+      const isRunning = status.running;
+      const dot = document.getElementById("status-dot-trading-bot-1");
+      const text = document.getElementById("status-text-trading-bot-1");
+      const btn = document.getElementById("start-btn-trading-bot-1");
+
+      dot.className = "status-dot " + (isRunning ? "running" : "stopped");
+      text.textContent = isRunning ? "Running" : "Stopped";
+      btn.className = "btn " + (isRunning ? "btn-danger btn-sm" : "btn-success btn-sm");
+      btn.textContent = isRunning ? "Stop" : "Start";
+    }
+
+    // Auto-refresh
+    setInterval(updateAllStatuses, 5000);
+    updateAllStatuses();
+
+    // Init view
+    showView('public');
   </script>
 </body>
 </html>
