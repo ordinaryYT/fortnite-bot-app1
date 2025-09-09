@@ -37,14 +37,16 @@ function broadcastLog(message) {
 
   let clean = message;
 
-  // Remove ANSI color codes
+  // 1. Remove ANSI color codes
   clean = clean.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "");
-  // Remove fnlb
+
+  // 2. Remove "fnlb"
   clean = clean.replace(/fnlb/gi, "");
-  // Remove standard log tags
+
+  // 3. Remove [LOG], [INFO], [WARN], [ERROR]
   clean = clean.replace(/^\[(LOG|INFO|WARN|ERROR)\]\s*/i, "");
 
-  // Skip noise
+  // 4. Skip unwanted noise
   const skipPatterns = [
     /Downloading\s*\.\.\./i,
     /Finished loading/i,
@@ -57,21 +59,21 @@ function broadcastLog(message) {
   ];
   if (skipPatterns.some((p) => p.test(clean))) return;
 
-  // Match [Source] [NameOrId] Message
+  // 5. Normalize log formats
   const match = clean.match(/^\[([^\]]+)\]\s*\[([^\]]+)\]\s*(.*)$/);
   if (match) {
-    const source = match[1];
-    let nameOrId = match[2];
-    let rest = match[3];
+    const source = match[1].trim();
+    const idOrName = match[2].trim();
+    let rest = match[3].trim();
 
-    if (/^(Bot|ReplyClient)$/i.test(source)) {
-      // Keep bot name
-      clean = `${nameOrId} ${rest}`;
+    if (/^Bot$/i.test(source) || /^ReplyClient$/i.test(source)) {
+      // Keep bot name, drop duplicate in message if present
+      clean = `${idOrName} ${rest.replace(new RegExp(idOrName, "gi"), "").trim()}`;
     } else if (/^Shard$/i.test(source) || /^Gateway$/i.test(source)) {
-      // Keep ID in [id] form
-      clean = `[${nameOrId}] ${rest}`;
+      // Show ID in brackets
+      clean = `[${idOrName}] ${rest}`;
     } else if (/^Client$/i.test(source)) {
-      // Special replacement with OGsbot
+      // Replace with OGsbot
       if (/Setting up/i.test(rest)) {
         clean = `Setting up OGsbot...`;
       } else if (/finished setting up/i.test(rest)) {
@@ -79,11 +81,16 @@ function broadcastLog(message) {
       } else {
         clean = `OGsbot ${rest}`;
       }
+    } else if (/^ShardingManager$/i.test(source)) {
+      // Normalize shard ID with brackets
+      clean = rest.replace(/ID:\s*([^\s]+)/i, "Starting shard with ID: [$1]");
     }
   }
 
-  // Strip ✓ and [i], keep [!]
+  // 6. Remove ✓ and [i], keep [!]
   clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "");
+
+  // 7. Final cleanup
   clean = clean.trim();
   if (!clean) return;
 
