@@ -10,16 +10,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Serve frontend
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
 
-// Worker + log streaming
 let worker = null;
 let logListeners = [];
 
-// --- Log interception ---
 const original = {
   log: console.log,
   info: console.info,
@@ -29,94 +26,108 @@ const original = {
 const originalWrite = process.stdout.write.bind(process.stdout);
 
 function timestamp() {
-  return new Date().toISOString().split("T")[1].split(".")[0]; // HH:MM:SS
+  return new Date().toISOString().split("T")[1].split(".")[0];
 }
 
-function broadcastLog(message) {
-  if (!message || !message.trim()) return;
+function broadcastLog(rawMessage) {
+  if (!rawMessage && rawMessage !== 0) return;
 
-  let clean = message;
+  let message = String(rawMessage);
+  const lines = message.split(/\r?\n/);
 
-  // 1. Remove ANSI color codes
-  clean = clean.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "");
+  for (let line of lines) {
+    if (!line || !line.trim()) continue;
+    let clean = line;
 
-  // 2. Remove fnlb
-  clean = clean.replace(/fnlb/gi, "");
+    // Remove ANSI codes, fnlb, log level tags
+    clean = clean.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "");
+    clean = clean.replace(/fnlb/gi, "");
+    clean = clean.replace(/^\s*\[(LOG|INFO|WARN|ERROR)\]\s*/i, "");
 
-  // 3. Remove [LOG], [INFO], [WARN], [ERROR]
-  clean = clean.replace(/^\[(LOG|INFO|WARN|ERROR)\]\s*/i, "");
+    // Skip noisy cosmetic stuff
+    const skipPatterns = [
+      /Downloading\s*\.\.\./i,
+      /Finished loading/i,
+      /Downloaded \d+ BN/i,
+      /Downloaded metadata/i,
+      /Adding \d+ shard bots/i,
+      /Bot added to system/i,
+      /Downloading cosmetics/i,
+      /Finished downloading cosmetics/i,
+    ];
+    if (skipPatterns.some((p) => p.test(clean))) continue;
 
-  // 4. Skip unwanted noise
-  const skipPatterns = [
-    /Downloading\s*\.\.\./i,
-    /Finished loading/i,
-    /Downloaded \d+ BN/i,
-    /Downloaded metadata/i,
-    /Adding \d+ shard bots/i,
-    /Bot added to system/i,
-    /Downloading cosmetics/i,
-    /Finished downloading cosmetics/i,
-  ];
-  if (skipPatterns.some((p) => p.test(clean))) return;
+    // Parse structured [Source] [IdOrName] Rest
+    const structured = clean.match(/^\s*\[([^\]]+)\]\s*\[([^\]]+)\]\s*(.*)$/);
+    if (structured) {
+      const source = structured[1].trim();
+      const idOrName = structured[2].trim();
+      let rest = structured[3].trim();
 
-  // 5. Normalize structured logs: [Source] [IdOrName] Rest...
-  const match = clean.match(/^\[([^\]]+)\]\s*\[([^\]]+)\]\s*(.*)$/);
-  if (match) {
-    const source = match[1].trim();
-    const idOrName = match[2].trim();
-    let rest = match[3].trim();
+      rest = rest.replace(/\[\s*(Bot|Client|Gateway|Shard|ShardingManager|ReplyClient)\s*\]/gi, "").trim();
+      rest = rest.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
 
-    if (/^Bot$/i.test(source) || /^ReplyClient$/i.test(source)) {
-      // Show bot name
-      clean = `${idOrName} ${rest.replace(new RegExp(idOrName, "gi"), "").trim()}`;
-    } else if (/^Shard$/i.test(source) || /^Gateway$/i.test(source)) {
-      // Show ID in brackets
-      clean = `[${idOrName}] ${rest}`;
-    } else if (/^Client$/i.test(source)) {
-      // Replace with OGsbot
-      if (/Setting up/i.test(rest)) {
-        clean = `Setting up OGsbot...`;
-      } else if (/finished setting up/i.test(rest)) {
-        clean = `OGsbot ${rest.replace(/Client\s*/i, "").trim()}`;
+      if (/^Bot$/i.test(source) || /^ReplyClient$/i.test(source)) {
+        clean = `[${idOrName}] ${rest}`;
+
+      } else if (/^Shard$/i.test(source) || /^Gateway$/i.test(source)) {
+        clean = `[${idOrName}] ${rest}`;
+
+      } else if (/^Client$/i.test(source)) {
+        if (/setting up/i.test(rest)) {
+          clean = `Setting up OGsbot...`;
+        } else if (/finished setting up/i.test(rest)) {
+          clean = `OGsbot ${rest.replace(/Client\s*/i, "").trim()}`;
+        } else {
+          clean = `OGsbot ${rest}`;
+        }
+
+      } else if (/^ShardingManager$/i.test(source)) {
+        const m = rest.match(/ID:\s*([^\s]+)/i);
+        if (m && m[1]) {
+          clean = rest.replace(/ID:\s*([^\s]+)/i, `ID: [${m[1]}]`);
+        } else {
+          clean = rest;
+        }
+
       } else {
-        clean = `OGsbot ${rest}`;
+        clean = `[${idOrName}] ${rest}`;
       }
-    } else if (/^ShardingManager$/i.test(source)) {
-      // Normalize shard ID with brackets
-      clean = rest.replace(/ID:\s*([^\s]+)/i, "Starting shard with ID: [$1]");
+    } else {
+      clean = clean.replace(/\[\s*(Bot|Client|Gateway|Shard|ShardingManager|ReplyClient)\s*\]/gi, "").trim();
+      clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
     }
+
+    clean = clean.replace(/\s{2,}/g, " ").trim();
+    if (!clean) continue;
+
+    const out = `[${timestamp()}] ${clean}`;
+    logListeners.forEach((res) => {
+      try {
+        res.write(`data: ${out}\n\n`);
+      } catch {}
+    });
   }
-
-  // 6. Remove ✓ and [i], keep [!]
-  clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "");
-
-  // 7. Final cleanup
-  clean = clean.trim();
-  if (!clean) return;
-
-  const line = `[${timestamp()}] ${clean}`;
-  logListeners.forEach((res) => res.write(`data: ${line}\n\n`));
 }
 
 function wrapConsole(method) {
   return (...args) => {
-    const msg = args.join(" ");
-    original[method](msg);
-    broadcastLog(`[${method.toUpperCase()}] ${msg}`);
+    const msg = args.map((a) => (typeof a === "object" ? JSON.stringify(a) : String(a))).join(" ");
+    original[method](...args);
+    broadcastLog(msg);
   };
 }
 
-// Replace console methods
 console.log = wrapConsole("log");
 console.info = wrapConsole("info");
 console.warn = wrapConsole("warn");
 console.error = wrapConsole("error");
 
-// Intercept stdout
 process.stdout.write = (chunk, encoding, callback) => {
-  const msg = chunk.toString();
-  originalWrite(chunk, encoding, callback);
-  broadcastLog(msg);
+  try {
+    originalWrite(chunk, encoding, callback);
+  } catch {}
+  broadcastLog(chunk);
 };
 
 // --- Worker functions ---
@@ -136,7 +147,9 @@ async function startWorker(category, token) {
 
   async function restart() {
     console.log("Restarting worker...");
-    await fnlb.stop();
+    try {
+      await fnlb.stop();
+    } catch {}
     await start();
   }
 
@@ -148,7 +161,9 @@ async function startWorker(category, token) {
 async function stopWorker() {
   if (worker) {
     clearInterval(worker.interval);
-    await worker.fnlb.stop();
+    try {
+      await worker.fnlb.stop();
+    } catch {}
     worker = null;
     console.log("Worker stopped");
     return true;
