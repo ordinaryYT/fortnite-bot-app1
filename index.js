@@ -29,39 +29,6 @@ function timestamp() {
   return new Date().toISOString().split("T")[1].split(".")[0];
 }
 
-function shouldSkipDumpLine(text) {
-  if (!text || !text.trim()) return true;
-
-  // Keep anything with ReplyClient or Bot errors
-  if (/ReplyClient/i.test(text)) return false;
-  if (/\b(error|warn|!|\[!\])\b/i.test(text)) return false;
-
-  // Skip junk debug dumps
-  const dumpIndicators = [
-    /^\s*[{[]/, // opening brace
-    /^\s*[}\]]\s*,?$/, // closing brace/bracket
-    /^\s*ua:/i,
-    /^\s*pb:/i,
-    /^\s*hotfix:/i,
-    /^\s*netcl/i,
-    /^\s*playlistRevisions:/i,
-    /\bDownloaded metadata\b/i,
-    /\bDownloaded \d+\s*BN\b/i,
-    /\bShard bots:/i,
-    /\bTotal Bots:/i,
-    /\bTotal Categories:/i,
-    /connecting\s*\(https?:\/\//i,
-  ];
-  if (dumpIndicators.some((rx) => rx.test(text))) return true;
-
-  // Generic key:value lines like "foo: bar," (skip unless error/warn/ReplyClient)
-  if (/^\s*[A-Za-z0-9_\-]+\s*:\s*.+[,}]?$/.test(text)) {
-    return true;
-  }
-
-  return false;
-}
-
 function broadcastLog(rawMessage) {
   if (!rawMessage && rawMessage !== 0) return;
   let message = String(rawMessage);
@@ -71,14 +38,49 @@ function broadcastLog(rawMessage) {
     if (!line || !line.trim()) continue;
     let clean = line;
 
-    // Sanitize
-    clean = clean.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, ""); // ANSI
+    // Strip ANSI + fnlb + log levels
+    clean = clean.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "");
     clean = clean.replace(/fnlb/gi, "");
     clean = clean.replace(/^\s*\[(LOG|INFO|ERROR)\]\s*/i, "");
     clean = clean.replace(/^\s*\[WARN\]\s*/i, "[WARN] ");
 
-    // Skip dumps unless they are ReplyClient/errors
-    if (shouldSkipDumpLine(clean)) continue;
+    // 🚨 FORCE ReplyClient lines to pass through
+    if (/\[ReplyClient\]/i.test(clean)) {
+      // remove ✓ and [i]
+      clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
+
+      // structured parse
+      const structured = clean.match(/^\s*\[([^\]]+)\]\s*\[([^\]]+)\]\s*(.*)$/);
+      if (structured) {
+        const idOrName = structured[2].trim();
+        let rest = structured[3].trim();
+        rest = rest.replace(/\[\s*ReplyClient\s*\]/gi, "").trim();
+        clean = `[${idOrName}] ${rest}`;
+      }
+
+      const out = `[${timestamp()}] ${clean}`;
+      logListeners.forEach((res) => {
+        try {
+          res.write(`data: ${out}\n\n`);
+        } catch {}
+      });
+      continue; // skip to next line
+    }
+
+    // 🚫 Skip unwanted debug/object dumps
+    if (
+      /^\s*[{]/.test(clean) ||
+      /^\s*[}\]]\s*,?$/.test(clean) ||
+      /^\s*\w+\s*:\s*.+[,}]?$/.test(clean) ||
+      /playlist_/i.test(clean) ||
+      /^\s*ua:/i.test(clean) ||
+      /^\s*pb:/i.test(clean) ||
+      /^\s*hotfix:/i.test(clean) ||
+      /^\s*netCL/i.test(clean) ||
+      /^\s*playlistRevisions:/i.test(clean)
+    ) {
+      continue;
+    }
 
     // Remove ✓ and [i], keep [!]
     clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
@@ -89,15 +91,12 @@ function broadcastLog(rawMessage) {
       const source = structured[1].trim();
       const idOrName = structured[2].trim();
       let rest = structured[3].trim();
+      rest = rest.replace(/\[\s*(Bot|Client|Gateway|Shard|ShardingManager)\s*\]/gi, "").trim();
 
-      rest = rest.replace(/\[\s*(Bot|Client|Gateway|Shard|ShardingManager|ReplyClient)\s*\]/gi, "").trim();
-
-      if (/^Bot$/i.test(source) || /^ReplyClient$/i.test(source)) {
+      if (/^Bot$/i.test(source)) {
         clean = `[${idOrName}] ${rest}`;
-
       } else if (/^Shard$/i.test(source) || /^Gateway$/i.test(source)) {
         clean = `[${idOrName}] ${rest}`;
-
       } else if (/^Client$/i.test(source)) {
         if (/setting up/i.test(rest)) {
           clean = `Setting up OGsbot...`;
@@ -106,28 +105,18 @@ function broadcastLog(rawMessage) {
         } else {
           clean = `OGsbot ${rest}`;
         }
-
       } else if (/^ShardingManager$/i.test(source)) {
-        if (/Stopping all active shards/i.test(rest)) {
-          clean = `Stopping all active bots`;
-        } else if (/Stopping shard with ID:/i.test(rest)) {
-          const m = rest.match(/ID:\s*([^\s]+)/i);
-          if (m && m[1]) clean = `Stopping bot with ID: [${m[1]}]`;
-        } else if (/Starting shard with ID:/i.test(rest)) {
-          const m = rest.match(/ID:\s*([^\s]+)/i);
-          if (m && m[1]) clean = `Starting bot with ID: [${m[1]}]`;
-        } else if (/Shard\s+([^\s]+)\s+stopped/i.test(rest)) {
-          const m = rest.match(/Shard\s+([^\s]+)\s+stopped/i);
-          if (m && m[1]) clean = `Bot ${m[1]} stopped`;
+        const m = rest.match(/ID:\s*([^\s]+)/i);
+        if (m && m[1]) {
+          clean = rest.replace(/ID:\s*([^\s]+)/i, `ID: [${m[1]}]`);
         } else {
           clean = rest;
         }
-
       } else {
         clean = `[${idOrName}] ${rest}`;
       }
     } else {
-      clean = clean.replace(/\[\s*(Bot|Client|Gateway|Shard|ShardingManager|ReplyClient)\s*\]/gi, "").trim();
+      clean = clean.replace(/\[\s*(Bot|Client|Gateway|Shard|ShardingManager)\s*\]/gi, "").trim();
       clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
     }
 
@@ -157,11 +146,13 @@ console.warn = wrapConsole("warn");
 console.error = wrapConsole("error");
 
 process.stdout.write = (chunk, encoding, callback) => {
-  try { originalWrite(chunk, encoding, callback); } catch {}
+  try {
+    originalWrite(chunk, encoding, callback);
+  } catch {}
   broadcastLog(chunk);
 };
 
-// Worker
+// --- Worker functions ---
 async function startWorker(category, token) {
   const FNLB = await import("fnlb");
   const fnlb = new FNLB.default();
@@ -178,7 +169,9 @@ async function startWorker(category, token) {
 
   async function restart() {
     console.log("Restarting worker...");
-    try { await fnlb.stop(); } catch {}
+    try {
+      await fnlb.stop();
+    } catch {}
     await start();
   }
 
@@ -190,7 +183,9 @@ async function startWorker(category, token) {
 async function stopWorker() {
   if (worker) {
     clearInterval(worker.interval);
-    try { await worker.fnlb.stop(); } catch {}
+    try {
+      await worker.fnlb.stop();
+    } catch {}
     worker = null;
     console.log("Worker stopped");
     return true;
@@ -198,7 +193,7 @@ async function stopWorker() {
   return false;
 }
 
-// API
+// --- API endpoints ---
 app.post("/start", async (req, res) => {
   const { category } = req.body;
   const token = process.env.API_TOKEN;
@@ -241,5 +236,6 @@ app.get("/logs", (req, res) => {
   });
 });
 
+// --- Start server ---
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
