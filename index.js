@@ -10,174 +10,27 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// serve the frontend
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "index.html"));
-});
-
-// ===== LOGGING SYSTEM =====
-let logListeners = [];
-let replyContinuation = 0;
-const REPLY_ALLOW_LINES = 6;
-
-const original = {
-  log: console.log,
-  info: console.info,
-  warn: console.warn,
-  error: console.error,
-};
-const originalWrite = process.stdout.write.bind(process.stdout);
-
-function timestamp() {
-  return new Date().toISOString().split("T")[1].split(".")[0];
-}
-
-function isJunkLine(text) {
-  return (
-    /^\s*[{]/.test(text) ||
-    /^\s*[}\]]\s*,?$/.test(text) ||
-    /\bmmsTicketPlaylistHotfixIdOverrides:/i.test(text) ||
-    /\bua:/i.test(text) ||
-    /\bpb:/i.test(text) ||
-    /\bhotfix:/i.test(text) ||
-    /\bnetcl/i.test(text) ||
-    /\bplaylistRevisions:/i.test(text) ||
-    /\bDownloaded metadata\b/i.test(text) ||
-    /\bDownloaded \d+\s*BN\b/i.test(text) ||
-    /\bShard bots:/i.test(text) ||
-    /\bTotal Bots:/i.test(text) ||
-    /\bTotal Categories:/i.test(text) ||
-    /Connecting\s*\(https?:\/\//i.test(text)
-  );
-}
-
-function broadcastLog(rawMessage) {
-  if (!rawMessage && rawMessage !== 0) return;
-  let message = String(rawMessage);
-  const lines = message.split(/\r?\n/);
-
-  for (let line of lines) {
-    if (!line || !line.trim()) continue;
-    let clean = line;
-
-    clean = clean.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "");
-    clean = clean.replace(/fnlb/gi, "");
-    clean = clean.replace(/^\s*\[(LOG|INFO|ERROR)\]\s*/i, "");
-    clean = clean.replace(/^\s*\[WARN\]\s*/i, "[WARN] ");
-
-    const isReplyLine = /\[ReplyClient\]/i.test(clean);
-    if (isReplyLine) {
-      replyContinuation = REPLY_ALLOW_LINES;
-      clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
-      const structured = clean.match(/^\s*\[([^\]]+)\]\s*\[([^\]]+)\]\s*(.*)$/);
-      if (structured) {
-        const idOrName = structured[2].trim();
-        let rest = structured[3].trim();
-        rest = rest.replace(/\[\s*ReplyClient\s*\]/gi, "").trim();
-        clean = `[${idOrName}] ${rest}`;
-      } else {
-        clean = clean.replace(/\[\s*ReplyClient\s*\]/gi, "").trim();
-      }
-      const out = `[${timestamp()}] ${clean}`;
-      logListeners.forEach((res) => res.write(`data: ${out}\n\n`));
-      continue;
-    }
-
-    if (replyContinuation > 0) {
-      replyContinuation--;
-      clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
-      const out = `[${timestamp()}] ${clean}`;
-      logListeners.forEach((res) => res.write(`data: ${out}\n\n`));
-      continue;
-    }
-
-    if (isJunkLine(clean)) {
-      if (!/\b(error|warn|!|\[!\])\b/i.test(clean)) continue;
-    }
-
-    clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
-
-    const structured = clean.match(/^\s*\[([^\]]+)\]\s*\[([^\]]+)\]\s*(.*)$/);
-    if (structured) {
-      const source = structured[1].trim();
-      const idOrName = structured[2].trim();
-      let rest = structured[3].trim();
-
-      rest = rest.replace(/\[\s*(Bot|Client|Gateway|Shard|ShardingManager|ReplyClient)\s*\]/gi, "").trim();
-
-      if (/^Bot$/i.test(source)) {
-        clean = `[${idOrName}] ${rest}`;
-      } else if (/^Shard$/i.test(source) || /^Gateway$/i.test(source)) {
-        clean = `[${idOrName}] ${rest}`;
-      } else if (/^Client$/i.test(source)) {
-        if (/setting up/i.test(rest)) {
-          clean = `Setting up OGsbot...`;
-        } else if (/finished setting up/i.test(rest)) {
-          clean = `OGsbot ${rest.replace(/Client\s*/i, "").trim()}`;
-        } else {
-          clean = `OGsbot ${rest}`;
-        }
-      } else if (/^ShardingManager$/i.test(source)) {
-        if (/Starting shard with ID:/i.test(rest)) {
-          const m = rest.match(/ID:\s*([^\s,]+)/i);
-          clean = m ? `Starting bot with ID: [${m[1]}]` : rest;
-        } else if (/Stopping shard with ID:/i.test(rest)) {
-          const m = rest.match(/ID:\s*([^\s,]+)/i);
-          clean = m ? `Stopping bot with ID: [${m[1]}]` : rest;
-        } else if (/Stopping all active shards/i.test(rest)) {
-          clean = `Stopping all active bots`;
-        } else if (/Shard\s+([^\s]+)\s+stopped/i.test(rest)) {
-          const m = rest.match(/Shard\s+([^\s]+)\s+stopped/i);
-          clean = m ? `Bot ${m[1]} stopped` : rest;
-        } else {
-          clean = rest;
-        }
-      } else {
-        clean = `[${idOrName}] ${rest}`;
-      }
-    } else {
-      clean = clean.replace(/\[\s*(Bot|Client|Gateway|Shard|ShardingManager|ReplyClient)\s*\]/gi, "").trim();
-      clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
-    }
-
-    clean = clean.replace(/\s{2,}/g, " ").trim();
-    if (!clean) continue;
-
-    const out = `[${timestamp()}] ${clean}`;
-    logListeners.forEach((res) => res.write(`data: ${out}\n\n`));
-  }
-}
-
-function wrapConsole(method) {
-  return (...args) => {
-    const msg = args.map((a) => {
-      if (a instanceof Error) return a.stack || String(a);
-      if (a && typeof a === "object") {
-        try { return JSON.stringify(a); } catch { return String(a); }
-      }
-      return String(a);
-    }).join(" ");
-    original[method](...args);
-    broadcastLog(msg);
-  };
-}
-
-console.log = wrapConsole("log");
-console.info = wrapConsole("info");
-console.warn = wrapConsole("warn");
-console.error = wrapConsole("error");
-
-process.stdout.write = (chunk, encoding, callback) => {
-  try { originalWrite(chunk, encoding, callback); } catch {}
-  broadcastLog(chunk);
-};
-
-// ===== FNLB WORKER =====
 let worker = null;
 
-async function startWorker(category, token) {
+async function startFNLBWorker(category, token) {
   const FNLB = await import("fnlb");
   const fnlb = new FNLB.default();
+
+  // --- LOG PATCH ---
+  const originalLog = console.log;
+  console.log = (...args) => {
+    const msg = args.join(" ");
+
+    // 1. Skip spam logs like playlist_xxx
+    if (msg.includes("playlist_")) return;
+
+    // 2. Replace words in cluster/server logs
+    let formatted = msg
+      .replace("Categories:", "Server:")
+      .replace("Bots per Shard:", "Server Capacity:");
+
+    originalLog(formatted);
+  };
 
   async function start() {
     await fnlb.start({
@@ -190,20 +43,21 @@ async function startWorker(category, token) {
   }
 
   async function restart() {
-    console.log("Restarting worker...");
-    try { await fnlb.stop(); } catch (e) { console.warn("fnlb stop error:", e); }
+    console.log("Restarting FNLB...");
+    await fnlb.stop();
     await start();
   }
 
   await start();
-  const interval = setInterval(restart, 3600000);
+  const interval = setInterval(restart, 3600000); // restart every hour
+
   worker = { fnlb, interval };
 }
 
-async function stopWorker() {
+async function stopFNLBWorker() {
   if (worker) {
     clearInterval(worker.interval);
-    try { await worker.fnlb.stop(); } catch (e) { console.warn("fnlb stop error:", e); }
+    await worker.fnlb.stop();
     worker = null;
     console.log("Worker stopped");
     return true;
@@ -211,45 +65,43 @@ async function stopWorker() {
   return false;
 }
 
-// ===== API ENDPOINTS =====
+// --- API ROUTES ---
+
+// Start FNLB
 app.post("/start", async (req, res) => {
   const { category } = req.body;
   const token = process.env.API_TOKEN;
+
   if (!category) return res.status(400).json({ error: "Category required" });
   if (!token) return res.status(500).json({ error: "API_TOKEN missing" });
 
-  if (worker) await stopWorker();
+  if (worker) await stopFNLBWorker();
 
   try {
-    await startWorker(category, token);
-    res.json({ success: true, running: true, message: `Worker started in category ${category}` });
-    console.log(`Worker started in category ${category}`);
+    await startFNLBWorker(category, token);
+    res.json({ message: `FNLB worker started in server ${category}` });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, error: "Failed to start worker" });
+    res.status(500).json({ error: "Failed to start FNLB worker" });
   }
 });
 
+// Stop FNLB
 app.post("/stop", async (req, res) => {
-  const stopped = await stopWorker();
-  res.json({ success: true, running: !!worker, message: stopped ? "Worker stopped" : "No active worker" });
+  const stopped = await stopFNLBWorker();
+  res.json({ message: stopped ? "FNLB worker stopped" : "No active worker" });
 });
 
+// Status check
 app.get("/status", (req, res) => {
   res.json({ running: !!worker });
 });
 
-app.get("/logs", (req, res) => {
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-
-  logListeners.push(res);
-  req.on("close", () => {
-    logListeners = logListeners.filter((r) => r !== res);
-  });
+// Serve frontend (index.html)
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
 });
 
-// ===== START SERVER =====
+// --- SERVER START ---
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 FNLB Render server running on port ${PORT}`));
