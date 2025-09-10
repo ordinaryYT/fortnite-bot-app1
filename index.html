@@ -20,36 +20,50 @@
     }
     * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     body { background: var(--primary-bg); color: var(--text-primary); min-height: 100vh; display: flex; flex-direction: column; }
-    .header { background: var(--secondary-bg); padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); }
-    .logo { display: flex; align-items: center; gap: 0.8rem; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); }
+    .header { background: var(--secondary-bg); padding: 1rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); }
+    .logo { display: flex; align-items: center; gap: 0.8rem; font-size: 1.2rem; font-weight: 700; color: var(--text-primary); }
     .logo i { color: var(--accent-purple); }
     .main-container { display: flex; flex: 1; }
-    .sidebar { width: 250px; background: var(--secondary-bg); padding: 1.5rem 0; border-right: 1px solid var(--border-color); display: flex; flex-direction: column; }
-    .nav-item { padding: 0.9rem 1.5rem; display: flex; align-items: center; gap: 0.8rem; color: var(--text-secondary); cursor: pointer; border-left: 4px solid transparent; }
+    .sidebar { width: 220px; background: var(--secondary-bg); padding: 1rem 0; border-right: 1px solid var(--border-color); display: flex; flex-direction: column; }
+    .nav-item { padding: 0.8rem 1rem; display: flex; align-items: center; gap: 0.6rem; color: var(--text-secondary); cursor: pointer; border-left: 4px solid transparent; }
     .nav-item:hover, .nav-item.active { background: rgba(110, 64, 201, 0.1); color: var(--text-primary); border-left-color: var(--accent-purple); }
-    .content { flex: 1; padding: 2rem; overflow-y: auto; }
-    .section-title { font-size: 1.4rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.8rem; }
-    .card { background: var(--card-bg); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
-    .input-group { margin-bottom: 1.2rem; }
-    .input-group label { display: block; margin-bottom: 0.5rem; color: var(--text-secondary); }
-    .input-group input { width: 100%; padding: 0.8rem 1rem; border-radius: 8px; border: 1px solid var(--border-color); background: var(--secondary-bg); color: var(--text-primary); }
-    .status-indicator { display: flex; align-items: center; gap: 0.5rem; margin: 1rem 0; padding: 0.8rem; border-radius: 8px; background: var(--secondary-bg); }
-    .status-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent-red); }
+    .content { flex: 1; padding: 1rem; overflow-y: auto; }
+    .section-title { font-size: 1.2rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.6rem; }
+    .card { background: var(--card-bg); border-radius: 12px; padding: 1rem; margin-bottom: 1rem; }
+    .input-group { margin-bottom: 1rem; }
+    .input-group label { display: block; margin-bottom: 0.4rem; color: var(--text-secondary); font-size: 0.9rem; }
+    .input-group input { width: 100%; padding: 0.6rem 0.8rem; border-radius: 6px; border: 1px solid var(--border-color); background: var(--secondary-bg); color: var(--text-primary); font-size: 0.9rem; }
+    .status-indicator { display: flex; align-items: center; gap: 0.5rem; margin: 0.8rem 0; padding: 0.6rem; border-radius: 6px; background: var(--secondary-bg); font-size: 0.9rem; }
+    .status-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent-red); }
     .status-dot.running { background: var(--accent-green); }
-    .btn-group { display: flex; gap: 1rem; margin-top: 1.5rem; }
-    .btn { padding: 0.8rem 1.5rem; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; }
+    .btn-group { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1rem; }
+    .btn { flex: 1; padding: 0.6rem; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 0.4rem; font-size: 0.9rem; }
     .btn-primary { background: var(--accent-purple); color: white; }
     .btn-danger { background: var(--accent-red); color: white; }
     .btn-info { background: var(--accent-blue); color: white; }
-    .log-container { background: var(--secondary-bg); border-radius: 12px; overflow: hidden; }
-    .log-header { padding: 1rem 1.5rem; background: rgba(0,0,0,0.2); }
-    .log-content { padding: 1rem; height: 300px; overflow-y: auto; font-family: 'Consolas', monospace; font-size: 0.9rem; }
-    .bot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.5rem; }
+    .log-container { background: var(--secondary-bg); border-radius: 12px; overflow: hidden; margin-top: 1rem; }
+    .log-header { padding: 0.8rem 1rem; background: rgba(0,0,0,0.2); font-size: 0.9rem; }
+    .log-content { padding: 0.6rem; height: 300px; overflow-y: auto; font-family: 'Consolas', monospace; font-size: 0.8rem; display: flex; flex-direction: column; gap: 0.2rem; }
+    .log-line { padding: 0.2rem 0.4rem; border-bottom: 1px solid rgba(255,255,255,0.05); }
+    .log-time { color: var(--text-secondary); margin-right: 0.5rem; }
+    .log-info { color: var(--text-primary); }
+    .log-warn { color: var(--accent-red); }
+    .log-error { color: var(--accent-red); font-weight: bold; }
+    .bot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; }
     .bot-card { background: var(--card-bg); border-radius: 12px; overflow: hidden; }
-    .bot-header { padding: 1rem; background: rgba(110, 64, 201, 0.2); display: flex; justify-content: space-between; align-items: center; }
-    .bot-name { font-weight: 600; }
-    .bot-status { font-size: 0.8rem; padding: 0.3rem 0.8rem; border-radius: 20px; background: var(--accent-green); color: white; }
+    .bot-header { padding: 0.6rem; background: rgba(110, 64, 201, 0.2); display: flex; justify-content: space-between; align-items: center; }
+    .bot-name { font-weight: 600; font-size: 0.9rem; }
+    .bot-status { font-size: 0.7rem; padding: 0.2rem 0.6rem; border-radius: 12px; background: var(--accent-green); color: white; }
     .hidden { display: none; }
+    /* Mobile */
+    @media (max-width: 768px) {
+      .main-container { flex-direction: column; }
+      .sidebar { width: 100%; flex-direction: row; overflow-x: auto; }
+      .nav-item { flex: 1; justify-content: center; border-left: none; border-bottom: 3px solid transparent; }
+      .nav-item:hover, .nav-item.active { border-left: none; border-bottom: 3px solid var(--accent-purple); }
+      .content { padding: 0.6rem; }
+      .btn { font-size: 0.8rem; padding: 0.5rem; }
+    }
   </style>
 </head>
 <body>
@@ -83,7 +97,7 @@
           <div class="btn-group">
             <button class="btn btn-primary" onclick="start()"><i class="fas fa-play"></i> Start</button>
             <button class="btn btn-danger" onclick="stop()"><i class="fas fa-stop"></i> Stop</button>
-            <button class="btn btn-info" onclick="status()"><i class="fas fa-sync"></i> Refresh Status</button>
+            <button class="btn btn-info" onclick="status()"><i class="fas fa-sync"></i> Refresh</button>
           </div>
         </div>
         <div class="log-container">
@@ -118,7 +132,19 @@
 
     function appendLog(data) {
       const output = document.getElementById("output");
-      output.textContent += data + "\\n";
+      const line = document.createElement("div");
+      line.className = "log-line";
+
+      let level = "info";
+      if (/error/i.test(data)) level = "error";
+      else if (/warn/i.test(data)) level = "warn";
+
+      const timeMatch = data.match(/^\[(\d{2}:\d{2}:\d{2})\]/);
+      const time = timeMatch ? timeMatch[1] : new Date().toLocaleTimeString();
+
+      line.innerHTML = `<span class="log-time">[${time}]</span> <span class="log-${level}">${data.replace(/^\[\d{2}:\d{2}:\d{2}\]\s*/, "")}</span>`;
+      output.appendChild(line);
+
       output.scrollTop = output.scrollHeight;
     }
 
