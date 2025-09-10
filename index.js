@@ -202,7 +202,7 @@ async function startWorker(category, token) {
     await fnlb.start({
       apiToken: token,
       numberOfShards: 1,
-      botsPerShard: 1,
+      botsPerShard: 10,
       categories: [category],
       logLevel: "INFO",
     });
