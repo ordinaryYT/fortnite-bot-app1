@@ -19,7 +19,7 @@ let logListeners = [];
 
 // Keep a short-lived state so multi-line ReplyClient messages aren't lost
 let replyContinuation = 0; // number of following lines to allow after a ReplyClient line
-const REPLY_ALLOW_LINES = 6; // tune if needed
+const REPLY_ALLOW_LINES = 12; // increased from 6
 
 const original = {
   log: console.log,
@@ -39,7 +39,7 @@ function isJunkLine(text) {
     /^\s*[{]/.test(text) ||                   // starting JSON object/dump
     /^\s*[}\]]\s*,?$/.test(text) ||           // closing brace/bracket lines
     /\bmmsTicketPlaylistHotfixIdOverrides:/i.test(text) ||
-    (/\bplaylist_/i.test(text)) ||            // we'll allow playlist_* when it's part of ReplyClient due to replyContinuation logic
+    // (removed /\bplaylist_/i filter so errors with playlist_* still show)
     /\bua:/i.test(text) ||
     /\bpb:/i.test(text) ||
     /\bhotfix:/i.test(text) ||
@@ -72,23 +72,18 @@ function broadcastLog(rawMessage) {
     // 2) Force ReplyClient lines (and their continuations) to pass
     const isReplyLine = /\[ReplyClient\]/i.test(clean);
     if (isReplyLine) {
-      // grant continuation allowance for the following lines (they may be wrapped)
       replyContinuation = REPLY_ALLOW_LINES;
-      // clean small markers and format
       clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
       const structured = clean.match(/^\s*\[([^\]]+)\]\s*\[([^\]]+)\]\s*(.*)$/);
       if (structured) {
         const idOrName = structured[2].trim();
         let rest = structured[3].trim();
-        // remove redundant ReplyClient label in the text
         rest = rest.replace(/\[\s*ReplyClient\s*\]/gi, "").trim();
         clean = `[${idOrName}] ${rest}`;
       } else {
-        // fallback: just remove the role tag and keep whole line
         clean = clean.replace(/\[\s*ReplyClient\s*\]/gi, "").trim();
       }
 
-      // output and continue
       const out = `[${timestamp()}] ${clean}`;
       logListeners.forEach((res) => {
         try { res.write(`data: ${out}\n\n`); } catch {}
@@ -99,7 +94,6 @@ function broadcastLog(rawMessage) {
     // 3) If we are in a ReplyClient continuation window, allow this line too
     if (replyContinuation > 0) {
       replyContinuation--;
-      // treat as normal (don't apply junk skipping). Clean small markers.
       clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
       const out = `[${timestamp()}] ${clean}`;
       logListeners.forEach((res) => {
@@ -110,9 +104,8 @@ function broadcastLog(rawMessage) {
 
     // 4) Skip only very specific junk lines (everything else allowed)
     if (isJunkLine(clean)) {
-      // allow if the line actually contains an explicit Error/Warning marker
       if (/\b(error|warn|!|\[!\])\b/i.test(clean)) {
-        // fall through and show it
+        // show error/warn lines anyway
       } else {
         continue;
       }
@@ -143,7 +136,6 @@ function broadcastLog(rawMessage) {
           clean = `OGsbot ${rest}`;
         }
       } else if (/^ShardingManager$/i.test(source)) {
-        // transform start/stop shard wording to bot wording
         if (/Starting shard with ID:/i.test(rest)) {
           const m = rest.match(/ID:\s*([^\s,]+)/i);
           clean = m ? `Starting bot with ID: [${m[1]}]` : rest;
@@ -162,7 +154,6 @@ function broadcastLog(rawMessage) {
         clean = `[${idOrName}] ${rest}`;
       }
     } else {
-      // Unstructured: remove role tags if present
       clean = clean.replace(/\[\s*(Bot|Client|Gateway|Shard|ShardingManager|ReplyClient)\s*\]/gi, "").trim();
       clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
     }
