@@ -12,38 +12,40 @@ app.use(express.json());
 
 let worker = null;
 
-async function startFNLBWorker(category, token) {
+// --- LOG PATCH (filters + replaces text, keeps logs visible) ---
+const originalLog = console.log;
+console.log = (...args) => {
+  const msg = args.join(" ");
+
+  // 1. Skip spam logs like playlist_xxx
+  if (msg.includes("playlist_")) return;
+
+  // 2. Replace wording for cluster/server logs
+  let formatted = msg
+    .replace("Categories:", "Server:")
+    .replace("Bots per Shard:", "Server Capacity:");
+
+  // Always show in Render logs
+  originalLog(formatted);
+};
+
+// --- FNLB Worker ---
+async function startFNLBWorker(categories, token) {
   const FNLB = await import("fnlb");
   const fnlb = new FNLB.default();
-
-  // --- LOG PATCH ---
-  const originalLog = console.log;
-  console.log = (...args) => {
-    const msg = args.join(" ");
-
-    // 1. Skip spam logs like playlist_xxx
-    if (msg.includes("playlist_")) return;
-
-    // 2. Replace words in cluster/server logs
-    let formatted = msg
-      .replace("Categories:", "Server:")
-      .replace("Bots per Shard:", "Server Capacity:");
-
-    originalLog(formatted);
-  };
 
   async function start() {
     await fnlb.start({
       apiToken: token,
       numberOfShards: 1,
-      botsPerShard: 1,
-      categories: [category],
+      botsPerShard: 10, // 10 bots per shard
+      categories: categories, // multiple categories
       logLevel: "INFO",
     });
   }
 
   async function restart() {
-    console.log("Restarting FNLB...");
+    console.log("🔄 Restarting FNLB...");
     await fnlb.stop();
     await start();
   }
@@ -59,7 +61,7 @@ async function stopFNLBWorker() {
     clearInterval(worker.interval);
     await worker.fnlb.stop();
     worker = null;
-    console.log("Worker stopped");
+    console.log("🛑 Worker stopped");
     return true;
   }
   return false;
@@ -69,17 +71,21 @@ async function stopFNLBWorker() {
 
 // Start FNLB
 app.post("/start", async (req, res) => {
-  const { category } = req.body;
+  const { categories } = req.body; // expect an array
   const token = process.env.API_TOKEN;
 
-  if (!category) return res.status(400).json({ error: "Category required" });
-  if (!token) return res.status(500).json({ error: "API_TOKEN missing" });
+  if (!categories || !Array.isArray(categories)) {
+    return res.status(400).json({ error: "Categories array required" });
+  }
+  if (!token) {
+    return res.status(500).json({ error: "API_TOKEN missing" });
+  }
 
   if (worker) await stopFNLBWorker();
 
   try {
-    await startFNLBWorker(category, token);
-    res.json({ message: `FNLB worker started in server ${category}` });
+    await startFNLBWorker(categories, token);
+    res.json({ message: `🚀 FNLB worker started with servers: ${categories.join(", ")}` });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to start FNLB worker" });
@@ -89,7 +95,7 @@ app.post("/start", async (req, res) => {
 // Stop FNLB
 app.post("/stop", async (req, res) => {
   const stopped = await stopFNLBWorker();
-  res.json({ message: stopped ? "FNLB worker stopped" : "No active worker" });
+  res.json({ message: stopped ? "🛑 FNLB worker stopped" : "No active worker" });
 });
 
 // Status check
@@ -97,11 +103,11 @@ app.get("/status", (req, res) => {
   res.json({ running: !!worker });
 });
 
-// Serve frontend (index.html)
+// Serve frontend
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
 
 // --- SERVER START ---
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`🚀 FNLB Render server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`✅ FNLB Render server running on port ${PORT}`));
