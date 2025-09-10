@@ -11,26 +11,27 @@ app.use(cors());
 app.use(express.json());
 
 let worker = null;
+let usedSlots = 0;
+const MAX_SLOTS = 10;
 
 // --- LOG PATCH (filters + replaces text, keeps logs visible) ---
 const originalLog = console.log;
 console.log = (...args) => {
   const msg = args.join(" ");
 
-  // 1. Skip spam logs like playlist_xxx
+  // skip spammy playlist logs
   if (msg.includes("playlist_")) return;
 
-  // 2. Replace wording for cluster/server logs
+  // rename terms
   let formatted = msg
     .replace("Categories:", "Server:")
     .replace("Bots per Shard:", "Server Capacity:");
 
-  // Always show in Render logs
   originalLog(formatted);
 };
 
 // --- FNLB Worker ---
-async function startFNLBWorker(categories, token) {
+async function startFNLBWorker(category, token) {
   const FNLB = await import("fnlb");
   const fnlb = new FNLB.default();
 
@@ -39,7 +40,7 @@ async function startFNLBWorker(categories, token) {
       apiToken: token,
       numberOfShards: 1,
       botsPerShard: 10, // 10 bots per shard
-      categories: categories, // multiple categories
+      categories: Array(MAX_SLOTS).fill(category), // fill with same category until full
       logLevel: "INFO",
     });
   }
@@ -51,7 +52,7 @@ async function startFNLBWorker(categories, token) {
   }
 
   await start();
-  const interval = setInterval(restart, 3600000); // restart every hour
+  const interval = setInterval(restart, 3600000);
 
   worker = { fnlb, interval };
 }
@@ -61,6 +62,7 @@ async function stopFNLBWorker() {
     clearInterval(worker.interval);
     await worker.fnlb.stop();
     worker = null;
+    usedSlots = 0;
     console.log("🛑 Worker stopped");
     return true;
   }
@@ -69,38 +71,41 @@ async function stopFNLBWorker() {
 
 // --- API ROUTES ---
 
-// Start FNLB
+// Start (assigns one slot at a time until 10 reached)
 app.post("/start", async (req, res) => {
-  const { categories } = req.body; // expect an array
   const token = process.env.API_TOKEN;
+  const category = "default-category"; // static or you can swap later
 
-  if (!categories || !Array.isArray(categories)) {
-    return res.status(400).json({ error: "Categories array required" });
+  if (!token) return res.status(500).json({ error: "API_TOKEN missing" });
+
+  if (usedSlots >= MAX_SLOTS) {
+    return res.status(400).json({ error: "❌ Server is full (10/10 slots used)" });
   }
-  if (!token) {
-    return res.status(500).json({ error: "API_TOKEN missing" });
-  }
 
-  if (worker) await stopFNLBWorker();
-
-  try {
-    await startFNLBWorker(categories, token);
-    res.json({ message: `🚀 FNLB worker started with servers: ${categories.join(", ")}` });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to start FNLB worker" });
+  if (!worker) {
+    try {
+      await startFNLBWorker(category, token);
+      usedSlots = 1;
+      return res.json({ message: `🚀 FNLB worker started (slot 1 of ${MAX_SLOTS})` });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ error: "Failed to start FNLB worker" });
+    }
+  } else {
+    usedSlots++;
+    return res.json({ message: `✅ Slot ${usedSlots} of ${MAX_SLOTS} now in use` });
   }
 });
 
-// Stop FNLB
+// Stop (clears everything)
 app.post("/stop", async (req, res) => {
   const stopped = await stopFNLBWorker();
   res.json({ message: stopped ? "🛑 FNLB worker stopped" : "No active worker" });
 });
 
-// Status check
+// Status
 app.get("/status", (req, res) => {
-  res.json({ running: !!worker });
+  res.json({ running: !!worker, usedSlots, maxSlots: MAX_SLOTS });
 });
 
 // Serve frontend
