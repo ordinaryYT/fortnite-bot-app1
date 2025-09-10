@@ -29,25 +29,22 @@ function timestamp() {
   return new Date().toISOString().split("T")[1].split(".")[0];
 }
 
-function shouldSkipLine(text) {
-  if (!text || !text.trim()) return true;
-
-  // ✅ Allow everything except known junk patterns
-  if (/^\s*[{]/.test(text)) return true; // opening {
-  if (/^\s*[}\]]\s*,?$/.test(text)) return true; // closing } ]
-  if (/^\s*ua:/i.test(text)) return true;
-  if (/^\s*pb:/i.test(text)) return true;
-  if (/^\s*hotfix:/i.test(text)) return true;
-  if (/^\s*netcl/i.test(text)) return true;
-  if (/^\s*playlistRevisions:/i.test(text)) return true;
-  if (/\bDownloaded metadata\b/i.test(text)) return true;
-  if (/\bDownloaded \d+\s*BN\b/i.test(text)) return true;
-  if (/\bShard bots:/i.test(text)) return true;
-  if (/\bTotal Bots:/i.test(text)) return true;
-  if (/\bTotal Categories:/i.test(text)) return true;
-  if (/Connecting\s*\(https?:\/\//i.test(text)) return true;
-
-  return false;
+function isJunkLine(text) {
+  return (
+    /^\s*[{]/.test(text) ||                   // opening {
+    /^\s*[}\]]\s*,?$/.test(text) ||           // closing } ]
+    /\bua:/i.test(text) ||
+    /\bpb:/i.test(text) ||
+    /\bhotfix:/i.test(text) ||
+    /\bnetcl/i.test(text) ||
+    /\bplaylistRevisions:/i.test(text) ||
+    /\bDownloaded metadata\b/i.test(text) ||
+    /\bDownloaded \d+\s*BN\b/i.test(text) ||
+    /\bShard bots:/i.test(text) ||
+    /\bTotal Bots:/i.test(text) ||
+    /\bTotal Categories:/i.test(text) ||
+    /Connecting\s*\(https?:\/\//i.test(text)
+  );
 }
 
 function broadcastLog(rawMessage) {
@@ -59,19 +56,19 @@ function broadcastLog(rawMessage) {
     if (!line || !line.trim()) continue;
     let clean = line;
 
-    // Strip ANSI, fnlb, log levels
+    // Strip ANSI + fnlb + log levels
     clean = clean.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "");
     clean = clean.replace(/fnlb/gi, "");
     clean = clean.replace(/^\s*\[(LOG|INFO|ERROR)\]\s*/i, "");
     clean = clean.replace(/^\s*\[WARN\]\s*/i, "[WARN] ");
 
-    // Skip only specific junk
-    if (shouldSkipLine(clean)) continue;
+    // Skip only the junk lines
+    if (isJunkLine(clean)) continue;
 
     // Remove ✓ and [i], keep [!]
     clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
 
-    // Structured logs: [Source] [IdOrName] rest
+    // Structured logs
     const structured = clean.match(/^\s*\[([^\]]+)\]\s*\[([^\]]+)\]\s*(.*)$/);
     if (structured) {
       const source = structured[1].trim();
@@ -93,7 +90,6 @@ function broadcastLog(rawMessage) {
           clean = `OGsbot ${rest}`;
         }
       } else if (/^ShardingManager$/i.test(source)) {
-        // Rename shard->bot in start/stop
         if (/Stopping all active shards/i.test(rest)) {
           clean = `Stopping all active bots`;
         } else if (/Stopping shard with ID:/i.test(rest)) {
@@ -112,7 +108,7 @@ function broadcastLog(rawMessage) {
         clean = `[${idOrName}] ${rest}`;
       }
     } else {
-      // Unstructured: strip role tags + clean
+      // Unstructured logs: just strip extra tags
       clean = clean.replace(/\[\s*(Bot|Client|Gateway|Shard|ShardingManager|ReplyClient)\s*\]/gi, "").trim();
       clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
     }
