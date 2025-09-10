@@ -1,59 +1,87 @@
-import express from "express";
-import cors from "cors";
-import path from "path";
-import { fileURLToPath } from "url";
+// View switching
+function showView(view) {
+  document.getElementById("public-view").classList.add("hidden");
+  document.getElementById("mybots-view").classList.add("hidden");
+  document.getElementById("account-view").classList.add("hidden");
+  document.getElementById(view + "-view").classList.remove("hidden");
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const app = express();
-app.use(cors());
-app.use(express.json());
-
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "index.html"));
-});
-
-let worker = null;
-let logListeners = [];
-
-// Keep a short-lived state so multi-line ReplyClient messages aren't lost
-let replyContinuation = 0; // number of following lines to allow after a ReplyClient line
-const REPLY_ALLOW_LINES = 6; // tune if needed
-
-const original = {
-  log: console.log,
-  info: console.info,
-  warn: console.warn,
-  error: console.error,
-};
-const originalWrite = process.stdout.write.bind(process.stdout);
-
-function timestamp() {
-  return new Date().toISOString().split("T")[1].split(".")[0];
+  document.querySelectorAll(".tabs button").forEach(btn => btn.classList.remove("active"));
+  document.getElementById("tab-" + view).classList.add("active");
 }
 
-function isJunkLine(text) {
-  // Only the specific junk you asked to remove
-  return (
-    /^\s*[{]/.test(text) ||                   // starting JSON object/dump
-    /^\s*[}\]]\s*,?$/.test(text) ||           // closing brace/bracket lines
-    /\bmmsTicketPlaylistHotfixIdOverrides:/i.test(text) ||
-    (/\bplaylist_/i.test(text)) ||            // we'll allow playlist_* when it's part of ReplyClient due to replyContinuation logic
-    /\bua:/i.test(text) ||
-    /\bpb:/i.test(text) ||
-    /\bhotfix:/i.test(text) ||
-    /\bnetcl/i.test(text) ||
-    /\bplaylistRevisions:/i.test(text) ||
-    /\bDownloaded metadata\b/i.test(text) ||
-    /\bDownloaded \d+\s*BN\b/i.test(text) ||
-    /\bShard bots:/i.test(text) ||
-    /\bTotal Bots:/i.test(text) ||
-    /\bTotal Categories:/i.test(text) ||
-    /Connecting\s*\(https?:\/\//i.test(text)
-  );
+// Logs
+function appendLog(data) {
+  const output = document.getElementById("output");
+  output.textContent += data + "\n";
+  output.scrollTop = output.scrollHeight;
 }
 
+// Backend calls
+async function start() {
+  const category = document.getElementById("category").value;
+  if (!category) {
+    alert("Enter a category ID");
+    return;
+  }
+  const res = await fetch("/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ category })
+  });
+  const data = await res.json();
+  appendLog(JSON.stringify(data, null, 2));
+  updateStatus();
+}
+
+async function stop() {
+  const res = await fetch("/stop", { method: "POST" });
+  const data = await res.json();
+  appendLog(JSON.stringify(data, null, 2));
+  updateStatus();
+}
+
+async function status() {
+  const res = await fetch("/status");
+  const data = await res.json();
+  appendLog(JSON.stringify(data, null, 2));
+  updateStatus();
+}
+
+async function updateStatus() {
+  const res = await fetch("/status");
+  const data = await res.json();
+  const display = document.getElementById("statusDisplay");
+  const dot = document.getElementById("statusDot");
+  display.textContent = data.running ? "Status: Running" : "Status: Stopped";
+  if (data.running) {
+    display.style.color = "#21c974";
+    dot.classList.add("running");
+  } else {
+    display.style.color = "#ff4365";
+    dot.classList.remove("running");
+  }
+}
+
+// Public bots
+function buildPublicBots() {
+  const container = document.getElementById("botList");
+  for (let i = 1; i <= 75; i++) {
+    const div = document.createElement("div");
+    div.className = "bot-item";
+    div.innerHTML = `OGsbot${i} - <span class="running">Running</span>`;
+    container.appendChild(div);
+  }
+}
+
+// Live log stream from backend
+function initLogStream() {
+  const source = new EventSource("/logs");
+  source.onmessage = (event) => {
+    appendLog(event.data);
+  };
+}
+
+// Log filtering function
 function broadcastLog(rawMessage) {
   if (!rawMessage && rawMessage !== 0) return;
   let message = String(rawMessage);
@@ -69,48 +97,9 @@ function broadcastLog(rawMessage) {
     clean = clean.replace(/^\s*\[(LOG|INFO|ERROR)\]\s*/i, ""); // strip generic level tags
     clean = clean.replace(/^\s*\[WARN\]\s*/i, "[WARN] ");     // keep WARN readable
 
-    // 2) Force ReplyClient lines (and their continuations) to pass
-    const isReplyLine = /\[ReplyClient\]/i.test(clean);
-    if (isReplyLine) {
-      // grant continuation allowance for the following lines (they may be wrapped)
-      replyContinuation = REPLY_ALLOW_LINES;
-      // clean small markers and format
-      clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
-      const structured = clean.match(/^\s*\[([^\]]+)\]\s*\[([^\]]+)\]\s*(.*)$/);
-      if (structured) {
-        const idOrName = structured[2].trim();
-        let rest = structured[3].trim();
-        // remove redundant ReplyClient label in the text
-        rest = rest.replace(/\[\s*ReplyClient\s*\]/gi, "").trim();
-        clean = `[${idOrName}] ${rest}`;
-      } else {
-        // fallback: just remove the role tag and keep whole line
-        clean = clean.replace(/\[\s*ReplyClient\s*\]/gi, "").trim();
-      }
-
-      // output and continue
-      const out = `[${timestamp()}] ${clean}`;
-      logListeners.forEach((res) => {
-        try { res.write(`data: ${out}\n\n`); } catch {}
-      });
-      continue;
-    }
-
-    // 3) If we are in a ReplyClient continuation window, allow this line too
-    if (replyContinuation > 0) {
-      replyContinuation--;
-      // treat as normal (don't apply junk skipping). Clean small markers.
-      clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
-      const out = `[${timestamp()}] ${clean}`;
-      logListeners.forEach((res) => {
-        try { res.write(`data: ${out}\n\n`); } catch {}
-      });
-      continue;
-    }
-
-    // 4) Skip only very specific junk lines (everything else allowed)
+    // 2) Filter out unwanted lines
     if (isJunkLine(clean)) {
-      // allow if the line actually contains an explicit Error/Warning marker
+      // Allow specific lines that contain important info
       if (/\b(error|warn|!|\[!\])\b/i.test(clean)) {
         // fall through and show it
       } else {
@@ -118,55 +107,40 @@ function broadcastLog(rawMessage) {
       }
     }
 
-    // 5) Remove ✓ and [i], keep [!]
-    clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
-
-    // 6) Structured logs parsing to format output
-    const structured = clean.match(/^\s*\[([^\]]+)\]\s*\[([^\]]+)\]\s*(.*)$/);
-    if (structured) {
-      const source = structured[1].trim();
-      const idOrName = structured[2].trim();
-      let rest = structured[3].trim();
-
-      rest = rest.replace(/\[\s*(Bot|Client|Gateway|Shard|ShardingManager|ReplyClient)\s*\]/gi, "").trim();
-
-      if (/^Bot$/i.test(source)) {
-        clean = `[${idOrName}] ${rest}`;
-      } else if (/^Shard$/i.test(source) || /^Gateway$/i.test(source)) {
-        clean = `[${idOrName}] ${rest}`;
-      } else if (/^Client$/i.test(source)) {
-        if (/setting up/i.test(rest)) {
-          clean = `Setting up OGsbot...`;
-        } else if (/finished setting up/i.test(rest)) {
-          clean = `OGsbot ${rest.replace(/Client\s*/i, "").trim()}`;
-        } else {
-          clean = `OGsbot ${rest}`;
-        }
-      } else if (/^ShardingManager$/i.test(source)) {
-        // transform start/stop shard wording to bot wording
-        if (/Starting shard with ID:/i.test(rest)) {
-          const m = rest.match(/ID:\s*([^\s,]+)/i);
-          clean = m ? `Starting bot with ID: [${m[1]}]` : rest;
-        } else if (/Stopping shard with ID:/i.test(rest)) {
-          const m = rest.match(/ID:\s*([^\s,]+)/i);
-          clean = m ? `Stopping bot with ID: [${m[1]}]` : rest;
-        } else if (/Stopping all active shards/i.test(rest)) {
-          clean = `Stopping all active bots`;
-        } else if (/Shard\s+([^\s]+)\s+stopped/i.test(rest)) {
-          const m = rest.match(/Shard\s+([^\s]+)\s+stopped/i);
-          clean = m ? `Bot ${m[1]} stopped` : rest;
-        } else {
-          clean = rest;
-        }
-      } else {
-        clean = `[${idOrName}] ${rest}`;
-      }
-    } else {
-      // Unstructured: remove role tags if present
-      clean = clean.replace(/\[\s*(Bot|Client|Gateway|Shard|ShardingManager|ReplyClient)\s*\]/gi, "").trim();
-      clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
+    // 3) Format specific log patterns
+    if (/Starting shard with ID:/i.test(clean)) {
+      const m = clean.match(/ID:\s*([^\s,]+)/i);
+      clean = m ? `Starting bot with ID: [${m[1]}]` : clean;
+    } else if (/User:\s*([^\s]+) has logged in current server compacity:/i.test(clean)) {
+      // Extract the username from the log and display it
+      const m = clean.match(/User:\s*([^\s]+) has logged in current server compacity:/i);
+      const username = m ? m[1] : "UNKNOWN";
+      clean = `User: ${username} has logged in current server compacity: 1. Bots`;
+      
+      // Update the UI with the username
+      updateUsername(username);
+    } else if (/Shard v\d+\.\d+\.\d+ \(Node/i.test(clean)) {
+      clean = clean.replace(/Shard/, "OGsbot");
+    } else if (/Cluster:\s*([^\s.]+). Categories:/i.test(clean)) {
+      // Extract the cluster name from the log and display it
+      const m = clean.match(/Cluster:\s*([^\s.]+). Categories:/i);
+      const clusterName = m ? m[1] : "UNKNOWN";
+      clean = `User: ${clusterName} has logged in current server compacity: 1. Bots`;
+      
+      // Update the UI with the cluster name
+      updateUsername(clusterName);
+    } else if (/Adding \d+ shard bots to Client/i.test(clean)) {
+      clean = clean.replace("shard bots", "bots").replace("Client", "OG Client");
+    } else if (/Bot added to system:/i.test(clean)) {
+      clean = clean.replace("Bot added to system", "Added Bot to system");
+    } else if (/Downloading cosmetics for all required languages/i.test(clean)) {
+      clean = clean.replace("required", "supported");
     }
 
+    // 4) Remove unnecessary markers
+    clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
+
+    // 5) Final cleanup
     clean = clean.replace(/\s{2,}/g, " ").trim();
     if (!clean) continue;
 
@@ -175,6 +149,46 @@ function broadcastLog(rawMessage) {
       try { res.write(`data: ${out}\n\n`); } catch {}
     });
   }
+}
+
+// Update username in the UI
+function updateUsername(username) {
+  const usernameElement = document.getElementById("username-display");
+  if (usernameElement) {
+    usernameElement.textContent = username;
+  }
+  
+  // Also update the user info in the header
+  const userInfoElement = document.getElementById("user-info-name");
+  if (userInfoElement && username !== "UNKNOWN") {
+    userInfoElement.textContent = username;
+  }
+}
+
+// Helper function to check for junk lines
+function isJunkLine(text) {
+  return (
+    /^\s*[{]/.test(text) ||                   // starting JSON object/dump
+    /^\s*[}\]]\s*,?$/.test(text) ||           // closing brace/bracket lines
+    /\bmmsTicketPlaylistHotfixIdOverrides:/i.test(text) ||
+    (/\bplaylist_/i.test(text) && !/\[ReplyClient\]/i.test(text)) ||
+    /\bua:/i.test(text) ||
+    /\bpb:/i.test(text) ||
+    /\bhotfix:/i.test(text) ||
+    /\bnetcl/i.test(text) ||
+    /\bplaylistRevisions:/i.test(text) ||
+    /\bDownloaded metadata\b/i.test(text) ||
+    /\bDownloaded \d+\s*BN\b/i.test(text) ||
+    /\bShard bots:/i.test(text) ||
+    /\bTotal Bots:/i.test(text) ||
+    /\bTotal Categories:/i.test(text) ||
+    /Connecting\s*\(https?:\/\//i.test(text)
+  );
+}
+
+// Timestamp function
+function timestamp() {
+  return new Date().toISOString().split('T')[1].split('.')[0];
 }
 
 // Console wrappers
@@ -192,6 +206,15 @@ function wrapConsole(method) {
   };
 }
 
+// Initialize console wrapping
+const original = {
+  log: console.log,
+  info: console.info,
+  warn: console.warn,
+  error: console.error,
+};
+const originalWrite = process.stdout.write.bind(process.stdout);
+
 console.log = wrapConsole("log");
 console.info = wrapConsole("info");
 console.warn = wrapConsole("warn");
@@ -202,7 +225,10 @@ process.stdout.write = (chunk, encoding, callback) => {
   broadcastLog(chunk);
 };
 
-// --- Worker functions ---
+// Worker functions
+let worker = null;
+let logListeners = [];
+
 async function startWorker(category, token) {
   const FNLB = await import("fnlb");
   const fnlb = new FNLB.default();
@@ -239,7 +265,7 @@ async function stopWorker() {
   return false;
 }
 
-// --- API endpoints ---
+// API endpoints
 app.post("/start", async (req, res) => {
   const { category } = req.body;
   const token = process.env.API_TOKEN;
@@ -280,6 +306,18 @@ app.get("/logs", (req, res) => {
   });
 });
 
-// --- Start server ---
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+// Initialize the application
+function init() {
+  buildPublicBots();
+  updateStatus();
+  setInterval(updateStatus, 5000);
+  initLogStream();
+  showView("public");
+}
+
+// Start the application when the DOM is loaded
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
