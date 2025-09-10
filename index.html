@@ -123,9 +123,9 @@
     }
 
     async function start() {
-      const botId=document.getElementById("botId").value;
-      if(!botId){alert("Enter a bot ID");return;}
-      const res=await fetch("/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({botId})});
+      const category=document.getElementById("botId").value;
+      if(!category){alert("Enter a bot ID");return;}
+      const res=await fetch("/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({category})});
       const data=await res.json();
       appendLog(JSON.stringify(data));
       updateStatus();
@@ -150,9 +150,9 @@
       const data=await res.json();
       const display=document.getElementById("statusDisplay");
       const dot=document.getElementById("statusDot");
-      display.textContent=data.running?`Running: ${data.count}/10`:"Status: Stopped";
+      display.textContent=data.running?`Running`:"Status: Stopped";
       if(data.running){dot.classList.add("running");} else {dot.classList.remove("running");}
-      renderMyBots(data.count);
+      renderMyBots(data.running?1:0);
     }
 
     function renderMyBots(count){
