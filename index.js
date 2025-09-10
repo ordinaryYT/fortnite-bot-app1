@@ -31,8 +31,10 @@ function timestamp() {
 
 function isJunkLine(text) {
   return (
-    /^\s*[{]/.test(text) ||                   // opening {
-    /^\s*[}\]]\s*,?$/.test(text) ||           // closing } ]
+    /^\s*[{]/.test(text) ||
+    /^\s*[}\]]\s*,?$/.test(text) ||
+    /\bmmsTicketPlaylistHotfixIdOverrides:/i.test(text) ||
+    (/\bplaylist_/i.test(text) && !/\[ReplyClient\]/i.test(text)) ||
     /\bua:/i.test(text) ||
     /\bpb:/i.test(text) ||
     /\bhotfix:/i.test(text) ||
@@ -56,13 +58,28 @@ function broadcastLog(rawMessage) {
     if (!line || !line.trim()) continue;
     let clean = line;
 
-    // Strip ANSI + fnlb + log levels
+    // Remove ANSI + fnlb + log levels
     clean = clean.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "");
     clean = clean.replace(/fnlb/gi, "");
     clean = clean.replace(/^\s*\[(LOG|INFO|ERROR)\]\s*/i, "");
     clean = clean.replace(/^\s*\[WARN\]\s*/i, "[WARN] ");
 
-    // Skip only the junk lines
+    // 🚨 Force ReplyClient logs to pass through
+    if (/\[ReplyClient\]/i.test(clean)) {
+      clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
+      const structured = clean.match(/^\s*\[([^\]]+)\]\s*\[([^\]]+)\]\s*(.*)$/);
+      if (structured) {
+        const idOrName = structured[2].trim();
+        let rest = structured[3].trim();
+        rest = rest.replace(/\[\s*ReplyClient\s*\]/gi, "").trim();
+        clean = `[${idOrName}] ${rest}`;
+      }
+      const out = `[${timestamp()}] ${clean}`;
+      logListeners.forEach((res) => res.write(`data: ${out}\n\n`));
+      continue;
+    }
+
+    // 🚫 Skip junk logs
     if (isJunkLine(clean)) continue;
 
     // Remove ✓ and [i], keep [!]
@@ -74,10 +91,9 @@ function broadcastLog(rawMessage) {
       const source = structured[1].trim();
       const idOrName = structured[2].trim();
       let rest = structured[3].trim();
+      rest = rest.replace(/\[\s*(Bot|Client|Gateway|Shard|ShardingManager)\s*\]/gi, "").trim();
 
-      rest = rest.replace(/\[\s*(Bot|Client|Gateway|Shard|ShardingManager|ReplyClient)\s*\]/gi, "").trim();
-
-      if (/^Bot$/i.test(source) || /^ReplyClient$/i.test(source)) {
+      if (/^Bot$/i.test(source)) {
         clean = `[${idOrName}] ${rest}`;
       } else if (/^Shard$/i.test(source) || /^Gateway$/i.test(source)) {
         clean = `[${idOrName}] ${rest}`;
@@ -108,8 +124,7 @@ function broadcastLog(rawMessage) {
         clean = `[${idOrName}] ${rest}`;
       }
     } else {
-      // Unstructured logs: just strip extra tags
-      clean = clean.replace(/\[\s*(Bot|Client|Gateway|Shard|ShardingManager|ReplyClient)\s*\]/gi, "").trim();
+      clean = clean.replace(/\[\s*(Bot|Client|Gateway|Shard|ShardingManager)\s*\]/gi, "").trim();
       clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
     }
 
@@ -117,11 +132,7 @@ function broadcastLog(rawMessage) {
     if (!clean) continue;
 
     const out = `[${timestamp()}] ${clean}`;
-    logListeners.forEach((res) => {
-      try {
-        res.write(`data: ${out}\n\n`);
-      } catch {}
-    });
+    logListeners.forEach((res) => res.write(`data: ${out}\n\n`));
   }
 }
 
