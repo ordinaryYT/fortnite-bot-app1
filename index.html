@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Control Panel</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #1e1e2f;
+      color: #f0f0f0;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+    }
+
+    .container {
+      margin-top: 40px;
+      background: #2a2a40;
+      border-radius: 12px;
+      padding: 20px 30px;
+      width: 600px;
+      box-shadow: 0 8px 25px rgba(0,0,0,0.5);
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .tabs {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+
+    .tabs button {
+      flex: 1;
+      padding: 10px;
+      margin: 0 5px;
+      background: #3b3b5c;
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .tabs button.active {
+      background: #4caf50;
+    }
+
+    .hidden { display: none; }
+
+    label {
+      display: block;
+      margin: 10px 0 5px 0;
+    }
+
+    input {
+      width: 100%;
+      padding: 10px;
+      border-radius: 6px;
+      border: none;
+      margin-bottom: 15px;
+      font-size: 16px;
+    }
+
+    button.action {
+      padding: 10px;
+      margin: 5px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    #start { background: #4caf50; }
+    #stop { background: #f44336; }
+    #statusBtn { background: #2196f3; }
+
+    .status {
+      text-align: center;
+      margin-bottom: 15px;
+      font-weight: 600;
+    }
+
+    pre {
+      background: #121226;
+      padding: 15px;
+      border-radius: 8px;
+      overflow-y: auto;
+      max-height: 200px;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      font-size: 14px;
+    }
+
+    /* Public Bots List */
+    .bot-list {
+      max-height: 400px;
+      overflow-y: auto;
+      background: #1e1e2f;
+      border: 1px solid #444;
+      border-radius: 6px;
+      padding: 10px;
+    }
+
+    .bot-item {
+      padding: 8px;
+      border-bottom: 1px solid #444;
+    }
+
+    .bot-item:last-child { border-bottom: none; }
+
+    .running {
+      color: #4caf50;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Control Panel</h1>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button id="tab-public" onclick="showView('public')">Public Bots</button>
+      <button id="tab-mybots" onclick="showView('mybots')">My Bots</button>
+      <button id="tab-account" onclick="showView('account')">Account</button>
+    </div>
+
+    <!-- Public Bots -->
+    <div id="public-view">
+      <h2>Public Bots</h2>
+      <div class="bot-list" id="botList"></div>
+    </div>
+
+    <!-- My Bots -->
+    <div id="mybots-view" class="hidden">
+      <h2>My Bots</h2>
+      <label for="category">Category</label>
+      <input id="category" placeholder="Enter category ID" />
+
+      <div class="status" id="statusDisplay">Status: Unknown</div>
+
+      <div style="text-align:center;">
+        <button id="start" class="action" onclick="start()">Start</button>
+        <button id="stop" class="action" onclick="stop()">Stop</button>
+        <button id="statusBtn" class="action" onclick="status()">Check Status</button>
+      </div>
+
+      <pre id="output"></pre>
+    </div>
+
+    <!-- Account -->
+    <div id="account-view" class="hidden">
+      <h2>My Account</h2>
+      <p>Profile settings and billing info will appear here.</p>
+    </div>
+  </div>
+
+  <script>
+    // View switching
+    function showView(view) {
+      document.getElementById("public-view").classList.add("hidden");
+      document.getElementById("mybots-view").classList.add("hidden");
+      document.getElementById("account-view").classList.add("hidden");
+      document.getElementById(view + "-view").classList.remove("hidden");
+
+      document.querySelectorAll(".tabs button").forEach(btn => btn.classList.remove("active"));
+      document.getElementById("tab-" + view).classList.add("active");
+    }
+
+    // Logs
+    function appendLog(data) {
+      const output = document.getElementById("output");
+      output.textContent += data + "\n";
+      output.scrollTop = output.scrollHeight;
+    }
+
+    // Backend calls
+    async function start() {
+      const category = document.getElementById("category").value;
+      if (!category) {
+        alert("Enter a category ID");
+        return;
+      }
+      const res = await fetch("/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category })
+      });
+      const data = await res.json();
+      appendLog(JSON.stringify(data, null, 2));
+      updateStatus();
+    }
+
+    async function stop() {
+      const res = await fetch("/stop", { method: "POST" });
+      const data = await res.json();
+      appendLog(JSON.stringify(data, null, 2));
+      updateStatus();
+    }
+
+    async function status() {
+      const res = await fetch("/status");
+      const data = await res.json();
+      appendLog(JSON.stringify(data, null, 2));
+      updateStatus();
+    }
+
+    async function updateStatus() {
+      const res = await fetch("/status");
+      const data = await res.json();
+      const display = document.getElementById("statusDisplay");
+      display.textContent = data.running ? "Status: Running" : "Status: Stopped";
+      display.style.color = data.running ? "#4caf50" : "#f44336";
+    }
+
+    // Public bots
+    function buildPublicBots() {
+      const container = document.getElementById("botList");
+      for (let i = 1; i <= 75; i++) {
+        const div = document.createElement("div");
+        div.className = "bot-item";
+        div.innerHTML = `OGsbot${i} - <span class="running">Running</span>`;
+        container.appendChild(div);
+      }
+    }
+
+    // Live log stream from backend
+    function initLogStream() {
+      const source = new EventSource("/logs");
+      source.onmessage = (event) => {
+        appendLog(event.data);
+      };
+    }
+
+    // Init
+    buildPublicBots();
+    updateStatus();
+    setInterval(updateStatus, 5000);
+    initLogStream();
+    showView("public");
+  </script>
+</body>
+</html>
