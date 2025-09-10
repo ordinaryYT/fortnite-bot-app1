@@ -29,6 +29,27 @@ function timestamp() {
   return new Date().toISOString().split("T")[1].split(".")[0];
 }
 
+function shouldSkipLine(text) {
+  if (!text || !text.trim()) return true;
+
+  // ✅ Allow everything except known junk patterns
+  if (/^\s*[{]/.test(text)) return true; // opening {
+  if (/^\s*[}\]]\s*,?$/.test(text)) return true; // closing } ]
+  if (/^\s*ua:/i.test(text)) return true;
+  if (/^\s*pb:/i.test(text)) return true;
+  if (/^\s*hotfix:/i.test(text)) return true;
+  if (/^\s*netcl/i.test(text)) return true;
+  if (/^\s*playlistRevisions:/i.test(text)) return true;
+  if (/\bDownloaded metadata\b/i.test(text)) return true;
+  if (/\bDownloaded \d+\s*BN\b/i.test(text)) return true;
+  if (/\bShard bots:/i.test(text)) return true;
+  if (/\bTotal Bots:/i.test(text)) return true;
+  if (/\bTotal Categories:/i.test(text)) return true;
+  if (/Connecting\s*\(https?:\/\//i.test(text)) return true;
+
+  return false;
+}
+
 function broadcastLog(rawMessage) {
   if (!rawMessage && rawMessage !== 0) return;
   let message = String(rawMessage);
@@ -38,62 +59,28 @@ function broadcastLog(rawMessage) {
     if (!line || !line.trim()) continue;
     let clean = line;
 
-    // Strip ANSI + fnlb + log levels
+    // Strip ANSI, fnlb, log levels
     clean = clean.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "");
     clean = clean.replace(/fnlb/gi, "");
     clean = clean.replace(/^\s*\[(LOG|INFO|ERROR)\]\s*/i, "");
     clean = clean.replace(/^\s*\[WARN\]\s*/i, "[WARN] ");
 
-    // 🚨 FORCE ReplyClient lines to pass through
-    if (/\[ReplyClient\]/i.test(clean)) {
-      // remove ✓ and [i]
-      clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
-
-      // structured parse
-      const structured = clean.match(/^\s*\[([^\]]+)\]\s*\[([^\]]+)\]\s*(.*)$/);
-      if (structured) {
-        const idOrName = structured[2].trim();
-        let rest = structured[3].trim();
-        rest = rest.replace(/\[\s*ReplyClient\s*\]/gi, "").trim();
-        clean = `[${idOrName}] ${rest}`;
-      }
-
-      const out = `[${timestamp()}] ${clean}`;
-      logListeners.forEach((res) => {
-        try {
-          res.write(`data: ${out}\n\n`);
-        } catch {}
-      });
-      continue; // skip to next line
-    }
-
-    // 🚫 Skip unwanted debug/object dumps
-    if (
-      /^\s*[{]/.test(clean) ||
-      /^\s*[}\]]\s*,?$/.test(clean) ||
-      /^\s*\w+\s*:\s*.+[,}]?$/.test(clean) ||
-      /playlist_/i.test(clean) ||
-      /^\s*ua:/i.test(clean) ||
-      /^\s*pb:/i.test(clean) ||
-      /^\s*hotfix:/i.test(clean) ||
-      /^\s*netCL/i.test(clean) ||
-      /^\s*playlistRevisions:/i.test(clean)
-    ) {
-      continue;
-    }
+    // Skip only specific junk
+    if (shouldSkipLine(clean)) continue;
 
     // Remove ✓ and [i], keep [!]
     clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
 
-    // Structured logs
+    // Structured logs: [Source] [IdOrName] rest
     const structured = clean.match(/^\s*\[([^\]]+)\]\s*\[([^\]]+)\]\s*(.*)$/);
     if (structured) {
       const source = structured[1].trim();
       const idOrName = structured[2].trim();
       let rest = structured[3].trim();
-      rest = rest.replace(/\[\s*(Bot|Client|Gateway|Shard|ShardingManager)\s*\]/gi, "").trim();
 
-      if (/^Bot$/i.test(source)) {
+      rest = rest.replace(/\[\s*(Bot|Client|Gateway|Shard|ShardingManager|ReplyClient)\s*\]/gi, "").trim();
+
+      if (/^Bot$/i.test(source) || /^ReplyClient$/i.test(source)) {
         clean = `[${idOrName}] ${rest}`;
       } else if (/^Shard$/i.test(source) || /^Gateway$/i.test(source)) {
         clean = `[${idOrName}] ${rest}`;
@@ -106,9 +93,18 @@ function broadcastLog(rawMessage) {
           clean = `OGsbot ${rest}`;
         }
       } else if (/^ShardingManager$/i.test(source)) {
-        const m = rest.match(/ID:\s*([^\s]+)/i);
-        if (m && m[1]) {
-          clean = rest.replace(/ID:\s*([^\s]+)/i, `ID: [${m[1]}]`);
+        // Rename shard->bot in start/stop
+        if (/Stopping all active shards/i.test(rest)) {
+          clean = `Stopping all active bots`;
+        } else if (/Stopping shard with ID:/i.test(rest)) {
+          const m = rest.match(/ID:\s*([^\s]+)/i);
+          clean = m ? `Stopping bot with ID: [${m[1]}]` : rest;
+        } else if (/Starting shard with ID:/i.test(rest)) {
+          const m = rest.match(/ID:\s*([^\s]+)/i);
+          clean = m ? `Starting bot with ID: [${m[1]}]` : rest;
+        } else if (/Shard\s+([^\s]+)\s+stopped/i.test(rest)) {
+          const m = rest.match(/Shard\s+([^\s]+)\s+stopped/i);
+          clean = m ? `Bot ${m[1]} stopped` : rest;
         } else {
           clean = rest;
         }
@@ -116,7 +112,8 @@ function broadcastLog(rawMessage) {
         clean = `[${idOrName}] ${rest}`;
       }
     } else {
-      clean = clean.replace(/\[\s*(Bot|Client|Gateway|Shard|ShardingManager)\s*\]/gi, "").trim();
+      // Unstructured: strip role tags + clean
+      clean = clean.replace(/\[\s*(Bot|Client|Gateway|Shard|ShardingManager|ReplyClient)\s*\]/gi, "").trim();
       clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
     }
 
