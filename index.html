@@ -65,7 +65,6 @@
     <main class="content">
       <section id="dashboard-view">
         <h1 class="section-title"><i class="fas fa-tachometer-alt"></i> Dashboard</h1>
-
         <div class="card">
           <h2 class="card-title">Bot Control</h2>
           <div class="input-group">
@@ -88,7 +87,7 @@
           <div class="log-content" id="output"></div>
         </div>
 
-        <!-- Command chatbox -->
+        <!-- NEW CHATBOX -->
         <div class="card">
           <h2 class="card-title">Command Box</h2>
           <div class="input-group">
@@ -131,9 +130,7 @@
     function initLogStream(){
       const source = new EventSource("/logs");
       source.onmessage = (event) => appendLog(event.data);
-      source.onerror = () => {
-        setTimeout(initLogStream, 5000);
-      };
+      source.onerror = () => { setTimeout(initLogStream, 5000); };
     }
 
     initLogStream();
