@@ -3,45 +3,113 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Bot Control Panel</title>
+  <title>OGbots Control Panel</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    body { background:#0f0f23; color:white; font-family:sans-serif; margin:0; padding:0; }
-    header { background:#1c1c38; padding:1rem 2rem; font-size:1.5rem; font-weight:700; border-bottom:1px solid #333; }
-    .container { padding:2rem; }
-    .card { background:#252547; padding:1.5rem; border-radius:12px; margin-bottom:1.5rem; }
-    .log-container { background:#1c1c38; border-radius:12px; overflow:hidden; }
-    .log-header { padding:1rem; background:rgba(0,0,0,0.2); }
-    .log-content { padding:1rem; height:300px; overflow-y:auto; font-family:Consolas, monospace; font-size:0.9rem; }
-    .input-group { margin-bottom:1.2rem; }
-    .input-group input { width:100%; padding:0.8rem 1rem; border-radius:8px; border:1px solid #444; background:#1c1c38; color:white; }
-    .btn { padding:0.8rem 1.5rem; border-radius:8px; border:none; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:0.5rem; }
-    .btn-primary { background:#6e40c9; color:white; }
+    :root {
+      --primary-bg: #0f0f23;
+      --secondary-bg: #1c1c38;
+      --card-bg: #252547;
+      --accent-purple: #6e40c9;
+      --accent-blue: #2b7cff;
+      --accent-green: #21c974;
+      --accent-red: #ff4365;
+      --text-primary: #ffffff;
+      --text-secondary: #a0a0c0;
+      --border-color: #3a3a62;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body { background: var(--primary-bg); color: var(--text-primary); min-height: 100vh; display: flex; flex-direction: column; }
+    .header { background: var(--secondary-bg); padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); }
+    .logo { display: flex; align-items: center; gap: 0.8rem; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); }
+    .logo i { color: var(--accent-purple); }
+    .main-container { display: flex; flex: 1; }
+    .sidebar { width: 250px; background: var(--secondary-bg); padding: 1.5rem 0; border-right: 1px solid var(--border-color); display: flex; flex-direction: column; }
+    .nav-item { padding: 0.9rem 1.5rem; display: flex; align-items: center; gap: 0.8rem; color: var(--text-secondary); cursor: pointer; border-left: 4px solid transparent; }
+    .nav-item:hover, .nav-item.active { background: rgba(110, 64, 201, 0.1); color: var(--text-primary); border-left-color: var(--accent-purple); }
+    .content { flex: 1; padding: 2rem; overflow-y: auto; }
+    .section-title { font-size: 1.4rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.8rem; }
+    .card { background: var(--card-bg); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
+    .input-group { margin-bottom: 1.2rem; }
+    .input-group label { display: block; margin-bottom: 0.5rem; color: var(--text-secondary); }
+    .input-group input { width: 100%; padding: 0.8rem 1rem; border-radius: 8px; border: 1px solid var(--border-color); background: var(--secondary-bg); color: var(--text-primary); }
+    .status-indicator { display: flex; align-items: center; gap: 0.5rem; margin: 1rem 0; padding: 0.8rem; border-radius: 8px; background: var(--secondary-bg); }
+    .status-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent-red); }
+    .status-dot.running { background: var(--accent-green); }
+    .btn-group { display: flex; gap: 1rem; margin-top: 1.5rem; }
+    .btn { padding: 0.8rem 1.5rem; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; }
+    .btn-primary { background: var(--accent-purple); color: white; }
+    .btn-danger { background: var(--accent-red); color: white; }
+    .btn-info { background: var(--accent-blue); color: white; }
+    .log-container { background: var(--secondary-bg); border-radius: 12px; overflow: hidden; }
+    .log-header { padding: 1rem 1.5rem; background: rgba(0,0,0,0.2); }
+    .log-content { padding: 1rem; height: 300px; overflow-y: auto; font-family: 'Consolas', monospace; font-size: 0.9rem; }
+    .hidden { display: none; }
   </style>
 </head>
 <body>
-  <header>
-    <i class="fas fa-robot"></i> Bot Control Panel
+  <header class="header">
+    <div class="logo">
+      <i class="fas fa-robot"></i>
+      <span>OGbots</span>
+    </div>
   </header>
 
-  <div class="container">
-    <div class="log-container">
-      <div class="log-header">Live Logs</div>
-      <div class="log-content" id="output"></div>
-    </div>
+  <div class="main-container">
+    <nav class="sidebar">
+      <div class="nav-item active" onclick="showView('dashboard')"><i class="fas fa-home"></i><span>Dashboard</span></div>
+      <div class="nav-item" onclick="showView('mybots')"><i class="fas fa-server"></i><span>My Bots</span></div>
+      <div class="nav-item" onclick="showView('public')"><i class="fas fa-globe"></i><span>Public Bots</span></div>
+    </nav>
 
-    <div class="card">
-      <h2>Command Box</h2>
-      <div class="input-group">
-        <input type="text" id="commandInput" placeholder="Enter command here..." />
-      </div>
-      <button class="btn btn-primary" onclick="sendCommand()">
-        <i class="fas fa-terminal"></i> Send Command
-      </button>
-    </div>
+    <main class="content">
+      <section id="dashboard-view">
+        <h1 class="section-title"><i class="fas fa-tachometer-alt"></i> Dashboard</h1>
+
+        <div class="card">
+          <h2 class="card-title">Bot Control</h2>
+          <div class="input-group">
+            <label for="category">Category ID</label>
+            <input type="text" id="category" placeholder="Enter category ID">
+          </div>
+          <div class="status-indicator">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusDisplay">Status: Unknown</span>
+          </div>
+          <div class="btn-group">
+            <button class="btn btn-primary" onclick="start()"><i class="fas fa-play"></i> Start</button>
+            <button class="btn btn-danger" onclick="stop()"><i class="fas fa-stop"></i> Stop</button>
+            <button class="btn btn-info" onclick="status()"><i class="fas fa-sync"></i> Refresh Status</button>
+          </div>
+        </div>
+
+        <div class="log-container">
+          <div class="log-header">Live Logs</div>
+          <div class="log-content" id="output"></div>
+        </div>
+
+        <!-- Command chatbox -->
+        <div class="card">
+          <h2 class="card-title">Command Box</h2>
+          <div class="input-group">
+            <input type="text" id="commandInput" placeholder="Enter command here..." />
+          </div>
+          <button class="btn btn-primary" onclick="sendCommand()">
+            <i class="fas fa-terminal"></i> Send Command
+          </button>
+        </div>
+      </section>
+    </main>
   </div>
 
   <script>
+    function showView(view) {
+      document.querySelectorAll("main section").forEach(s => s.classList.add("hidden"));
+      document.getElementById(view+"-view").classList.remove("hidden");
+      document.querySelectorAll(".nav-item").forEach(i=>i.classList.remove("active"));
+      document.querySelector(`.nav-item[onclick="showView('${view}')"]`).classList.add("active");
+    }
+
     function appendLog(data) {
       const output = document.getElementById("output");
       output.textContent += data + "\n";
@@ -63,8 +131,7 @@
     function initLogStream(){
       const source = new EventSource("/logs");
       source.onmessage = (event) => appendLog(event.data);
-      source.onerror = (error) => {
-        console.error("SSE connection error:", error);
+      source.onerror = () => {
         setTimeout(initLogStream, 5000);
       };
     }
