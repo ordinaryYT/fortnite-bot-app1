@@ -63,4 +63,176 @@
   </header>
 
   <div class="main-container">
-   
+    <nav class="sidebar">
+      <div class="nav-item active" onclick="showView('dashboard')"><i class="fas fa-home"></i><span>Dashboard</span></div>
+      <div class="nav-item" onclick="showView('mybots')"><i class="fas fa-server"></i><span>My Bots</span></div>
+      <div class="nav-item" onclick="showView('public')"><i class="fas fa-globe"></i><span>Public Bots</span></div>
+    </nav>
+
+    <main class="content">
+      <section id="dashboard-view">
+        <h1 class="section-title"><i class="fas fa-tachometer-alt"></i> Dashboard</h1>
+        <div class="card">
+          <h2 class="card-title">Bot Control</h2>
+          <div class="input-group">
+            <label for="category">Category ID</label>
+            <input type="text" id="category" placeholder="Enter category ID">
+          </div>
+          <div class="status-indicator">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusDisplay">Status: Unknown</span>
+          </div>
+          <div class="slots-indicator">
+            <span id="slotsDisplay">Slots: 0/10</span>
+          </div>
+          <div class="category-list" id="categoryList"></div>
+          <div class="btn-group">
+            <button class="btn btn-primary" onclick="start()"><i class="fas fa-play"></i> Start</button>
+            <button class="btn btn-danger" onclick="stop()"><i class="fas fa-stop"></i> Stop</button>
+            <button class="btn btn-info" onclick="status()"><i class="fas fa-sync"></i> Refresh Status</button>
+          </div>
+        </div>
+        <div class="log-container">
+          <div class="log-header">Live Logs</div>
+          <div class="log-content" id="output"></div>
+        </div>
+      </section>
+
+      <section id="mybots-view" class="hidden">
+        <h1 class="section-title"><i class="fas fa-server"></i> My Bots <span id="myBotsCount"></span></h1>
+        <div class="bot-grid" id="myBotsList"></div>
+      </section>
+
+      <section id="public-view" class="hidden">
+        <h1 class="section-title"><i class="fas fa-globe"></i> Public Bots</h1>
+        <button class="btn btn-info" onclick="requestPublicBot()">Request Public Bot</button>
+        <div class="bot-grid" id="publicBotsList"></div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    function showView(view) {
+      document.querySelectorAll("main section").forEach(s => s.classList.add("hidden"));
+      document.getElementById(view+"-view").classList.remove("hidden");
+      document.querySelectorAll(".nav-item").forEach(i=>i.classList.remove("active"));
+      document.querySelector(`.nav-item[onclick="showView('${view}')"]`).classList.add("active");
+
+      if(view === "mybots") updateStatus();
+      if(view === "public") buildPublicBots();
+    }
+
+    function appendLog(data) {
+      const output = document.getElementById("output");
+      output.textContent += data + "\n";
+      output.scrollTop = output.scrollHeight;
+    }
+
+    async function start() {
+      const category = document.getElementById("category").value;
+      if(!category){alert("Enter a category ID");return;}
+      const res = await fetch("/start", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({category})
+      });
+      const data = await res.json();
+      appendLog(JSON.stringify(data));
+      updateStatus();
+    }
+
+    async function stop() {
+      const res = await fetch("/stop", {method: "POST"});
+      const data = await res.json();
+      appendLog(JSON.stringify(data));
+      updateStatus();
+    }
+
+    async function status() {
+      const res = await fetch("/status");
+      const data = await res.json();
+      appendLog(JSON.stringify(data));
+      updateStatus();
+    }
+
+    async function updateStatus() {
+      const res = await fetch("/status");
+      const data = await res.json();
+      const display = document.getElementById("statusDisplay");
+      const dot = document.getElementById("statusDot");
+      const slots = document.getElementById("slotsDisplay");
+      
+      display.textContent = data.running ? "Status: Running" : "Status: Stopped";
+      slots.textContent = `Slots: ${data.slotsUsed}/${data.slotsMax}`;
+      
+      if(data.running) {
+        dot.classList.add("running");
+      } else {
+        dot.classList.remove("running");
+      }
+      
+      // Update category list
+      const categoryList = document.getElementById("categoryList");
+      categoryList.innerHTML = "";
+      
+      if (data.categories && data.categories.length > 0) {
+        const title = document.createElement("div");
+        title.textContent = "Active Categories:";
+        title.style.marginBottom = "0.5rem";
+        title.style.fontWeight = "bold";
+        categoryList.appendChild(title);
+        
+        data.categories.forEach(cat => {
+          const item = document.createElement("div");
+          item.className = "category-item";
+          item.textContent = cat;
+          categoryList.appendChild(item);
+        });
+      }
+      
+      renderMyBots(data.slotsUsed);
+    }
+
+    function renderMyBots(count){
+      const container = document.getElementById("myBotsList");
+      container.innerHTML = "";
+      for(let i = 1; i <= count; i++){
+        const div = document.createElement("div");
+        div.className = "bot-card";
+        div.innerHTML = `<div class="bot-header"><div class="bot-name">OGprivatebot${i}</div><div class="bot-status">Running</div></div>`;
+        container.appendChild(div);
+      }
+      document.getElementById("myBotsCount").textContent = `Running: ${count}/10`;
+    }
+
+    function buildPublicBots(){
+      const container = document.getElementById("publicBotsList");
+      container.innerHTML = "";
+      for(let i = 1; i <= 75; i++){
+        const div = document.createElement("div");
+        div.className = "bot-card";
+        div.innerHTML = `<div class="bot-header"><div class="bot-name">OGsbot${i}</div><div class="bot-status">Running</div></div>`;
+        container.appendChild(div);
+      }
+    }
+
+    function requestPublicBot(){
+      const container = document.getElementById("publicBotsList");
+      const div = document.createElement("div");
+      div.className = "bot-card";
+      div.innerHTML = `<div class="bot-header"><div class="bot-name">Public Bot</div><div class="bot-status">Running</div></div><p>ID: 67c2fd571906bd75e5239684</p>`;
+      container.appendChild(div);
+    }
+
+    function initLogStream(){
+      const source = new EventSource("/logs");
+      source.onmessage = (event) => appendLog(event.data);
+    }
+
+    // Init
+    updateStatus();
+    setInterval(updateStatus, 5000);
+    initLogStream();
+  </script>
+</body>
+</html>
