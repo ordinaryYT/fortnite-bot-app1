@@ -51,7 +51,11 @@ function isJunkLine(text) {
     /\bShard bots:/i.test(text) ||
     /\bTotal Bots:/i.test(text) ||
     /\bTotal Categories:/i.test(text) ||
-    /Connecting\s*\(https?:\/\//i.test(text)
+    /Connecting\s*\(https?:\/\//i.test(text) ||
+    /playlist_/i.test(text) || // Filter out all playlist lines
+    /Checking for updates/i.test(text) || // Filter update checks
+    /v\d+\.\d+\.\d+ is up to date/i.test(text) || // Filter version info
+    /Finished loading v\d+\.\d+\.\d+/i.test(text) // Filter loading info
   );
 }
 
@@ -115,7 +119,12 @@ function broadcastLog(rawMessage) {
     // 5) Remove ✓ and [i], keep [!]
     clean = clean.replace(/\[\s*✓\s*\]|\[\s*i\s*\]/gi, "").trim();
 
-    // 6) Structured logs parsing to format output
+    // 6) Apply specific text replacements
+    clean = clean.replace(/Cluster:/gi, "User:");
+    clean = clean.replace(/Categories: (\d+)/gi, "Server Space Usage: $1/10");
+    clean = clean.replace(/Bots per Shard:/gi, "Server Capacity:");
+
+    // 7) Structured logs parsing to format output
     const structured = clean.match(/^\s*\[([^\]]+)\]\s*\[([^\]]+)\]\s*(.*)$/);
     if (structured) {
       const source = structured[1].trim();
