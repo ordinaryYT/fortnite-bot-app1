@@ -52,6 +52,7 @@
     .hidden { display: none; }
     .category-list { margin-top: 1rem; }
     .category-item { padding: 0.5rem; background: var(--secondary-bg); margin-bottom: 0.5rem; border-radius: 6px; display: flex; justify-content: space-between; }
+    .slots-indicator { margin: 1rem 0; font-weight: 600; }
   </style>
 </head>
 <body>
@@ -82,9 +83,7 @@
             <div class="status-dot" id="statusDot"></div>
             <span id="statusDisplay">Status: Unknown</span>
           </div>
-          <div class="slots-indicator">
-            <span id="slotsDisplay">Slots: 0/10</span>
-          </div>
+          <div class="slots-indicator" id="slotsDisplay">Slots: 0/10</div>
           <div class="category-list" id="categoryList"></div>
           <div class="btn-group">
             <button class="btn btn-primary" onclick="start()"><i class="fas fa-play"></i> Start</button>
@@ -156,41 +155,45 @@
     }
 
     async function updateStatus() {
-      const res = await fetch("/status");
-      const data = await res.json();
-      const display = document.getElementById("statusDisplay");
-      const dot = document.getElementById("statusDot");
-      const slots = document.getElementById("slotsDisplay");
-      
-      display.textContent = data.running ? "Status: Running" : "Status: Stopped";
-      slots.textContent = `Slots: ${data.slotsUsed}/${data.slotsMax}`;
-      
-      if(data.running) {
-        dot.classList.add("running");
-      } else {
-        dot.classList.remove("running");
-      }
-      
-      // Update category list
-      const categoryList = document.getElementById("categoryList");
-      categoryList.innerHTML = "";
-      
-      if (data.categories && data.categories.length > 0) {
-        const title = document.createElement("div");
-        title.textContent = "Active Categories:";
-        title.style.marginBottom = "0.5rem";
-        title.style.fontWeight = "bold";
-        categoryList.appendChild(title);
+      try {
+        const res = await fetch("/status");
+        const data = await res.json();
+        const display = document.getElementById("statusDisplay");
+        const dot = document.getElementById("statusDot");
+        const slots = document.getElementById("slotsDisplay");
         
-        data.categories.forEach(cat => {
-          const item = document.createElement("div");
-          item.className = "category-item";
-          item.textContent = cat;
-          categoryList.appendChild(item);
-        });
+        display.textContent = data.running ? "Status: Running" : "Status: Stopped";
+        slots.textContent = `Slots: ${data.slotsUsed}/${data.slotsMax}`;
+        
+        if(data.running) {
+          dot.classList.add("running");
+        } else {
+          dot.classList.remove("running");
+        }
+        
+        // Update category list
+        const categoryList = document.getElementById("categoryList");
+        categoryList.innerHTML = "";
+        
+        if (data.categories && data.categories.length > 0) {
+          const title = document.createElement("div");
+          title.textContent = "Active Categories:";
+          title.style.marginBottom = "0.5rem";
+          title.style.fontWeight = "bold";
+          categoryList.appendChild(title);
+          
+          data.categories.forEach(cat => {
+            const item = document.createElement("div");
+            item.className = "category-item";
+            item.textContent = cat;
+            categoryList.appendChild(item);
+          });
+        }
+        
+        renderMyBots(data.slotsUsed);
+      } catch (error) {
+        console.error("Failed to update status:", error);
       }
-      
-      renderMyBots(data.slotsUsed);
     }
 
     function renderMyBots(count){
@@ -227,6 +230,10 @@
     function initLogStream(){
       const source = new EventSource("/logs");
       source.onmessage = (event) => appendLog(event.data);
+      source.onerror = (error) => {
+        console.error("SSE connection error:", error);
+        setTimeout(initLogStream, 5000); // Reconnect after 5 seconds
+      };
     }
 
     // Init
