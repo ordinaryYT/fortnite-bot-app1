@@ -1,113 +1,163 @@
-import express from "express";
-import cors from "cors";
-import path from "path";
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const app = express();
-app.use(cors());
-app.use(express.json());
-
-let worker = null;
-let categories = []; // dynamic slots
-const MAX_SLOTS = 10;
-
-// --- LOG PATCH ---
-const originalLog = console.log;
-console.log = (...args) => {
-  const msg = args.join(" ");
-  if (msg.includes("playlist_")) return; // filter playlist spam
-  let formatted = msg
-    .replace("Categories:", "Server:")
-    .replace("Bots per Shard:", "Server Capacity:");
-  originalLog(formatted);
-};
-
-// --- FNLB Worker ---
-async function startFNLBWorker(token) {
-  const FNLB = await import("fnlb");
-  const fnlb = new FNLB.default();
-
-  async function start() {
-    await fnlb.start({
-      apiToken: token,
-      numberOfShards: 1,
-      botsPerShard: 10,
-      categories: categories, // dynamic array
-      logLevel: "INFO",
-    });
-  }
-
-  async function restart() {
-    console.log("🔄 Restarting FNLB...");
-    await fnlb.stop();
-    await start();
-  }
-
-  await start();
-  const interval = setInterval(restart, 3600000);
-  worker = { fnlb, interval };
-}
-
-async function stopFNLBWorker() {
-  if (worker) {
-    clearInterval(worker.interval);
-    await worker.fnlb.stop();
-    worker = null;
-    categories = [];
-    console.log("🛑 Worker stopped");
-    return true;
-  }
-  return false;
-}
-
-// --- API ROUTES ---
-
-// Start: add a new category (slot)
-app.post("/start", async (req, res) => {
-  const { category } = req.body;
-  const token = process.env.API_TOKEN;
-
-  if (!token) return res.status(500).json({ error: "API_TOKEN missing" });
-  if (!category) return res.status(400).json({ error: "Category ID required" });
-
-  if (categories.length >= MAX_SLOTS) {
-    return res.status(400).json({ error: `❌ Server full (${MAX_SLOTS}/${MAX_SLOTS} slots used)` });
-  }
-
-  categories.push(category);
-
-  if (!worker) {
-    try {
-      await startFNLBWorker(token);
-      return res.json({ message: `🚀 FNLB started with category ${category} (slot 1 of ${MAX_SLOTS})` });
-    } catch (err) {
-      console.error(err);
-      return res.status(500).json({ error: "Failed to start FNLB worker" });
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>OGbot Control Panel</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #0d1117;
+      color: #c9d1d9;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
     }
-  } else {
-    return res.json({ message: `✅ Category ${category} added (slot ${categories.length} of ${MAX_SLOTS})` });
-  }
-});
+    header {
+      background: #161b22;
+      padding: 1rem;
+      text-align: center;
+      font-size: 1.4rem;
+      font-weight: bold;
+      color: #58a6ff;
+    }
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 2fr;
+      gap: 1rem;
+      padding: 1rem;
+    }
+    .panel {
+      background: #161b22;
+      border-radius: 8px;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      box-shadow: 0 0 8px rgba(0,0,0,0.3);
+    }
+    .logs {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 0.5rem;
+      height: 100%;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 0.9rem;
+      white-space: pre-wrap;
+    }
+    button {
+      background: #238636;
+      border: none;
+      color: #fff;
+      padding: 0.6rem 1rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    button:hover {
+      background: #2ea043;
+    }
+    button.stop {
+      background: #da3633;
+    }
+    button.stop:hover {
+      background: #f85149;
+    }
+    input {
+      padding: 0.6rem;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      background: #0d1117;
+      color: #c9d1d9;
+      font-size: 1rem;
+    }
+    .status-box {
+      font-size: 0.9rem;
+      padding: 0.5rem;
+      background: #21262d;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <header>⚡ OGbot Control Panel</header>
+  <main>
+    <div class="panel">
+      <h2>Controls</h2>
+      <label for="category">Category ID:</label>
+      <input type="text" id="category" placeholder="Enter category ID..." />
+      <button onclick="start()">Start</button>
+      <button class="stop" onclick="stop()">Stop</button>
+      <button onclick="status()">Check Status</button>
+      <div class="status-box" id="statusBox">Status: Unknown</div>
+    </div>
 
-// Stop worker (reset all slots)
-app.post("/stop", async (req, res) => {
-  const stopped = await stopFNLBWorker();
-  res.json({ message: stopped ? "🛑 FNLB worker stopped" : "No active worker" });
-});
+    <div class="panel">
+      <h2>Logs</h2>
+      <div id="logs" class="logs"></div>
+    </div>
+  </main>
 
-// Status
-app.get("/status", (req, res) => {
-  res.json({ running: !!worker, usedSlots: categories.length, maxSlots: MAX_SLOTS, categories });
-});
+  <script>
+    const logsEl = document.getElementById("logs");
+    const statusBox = document.getElementById("statusBox");
 
-// Serve frontend
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "index.html"));
-});
+    // Connect to backend WebSocket for logs
+    const wsProtocol = location.protocol === "https:" ? "wss" : "ws";
+    const ws = new WebSocket(wsProtocol + "://" + location.host);
 
-// --- SERVER START ---
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`✅ FNLB Render server running on port ${PORT}`));
+    ws.onmessage = (event) => {
+      const msg = event.data;
+      const div = document.createElement("div");
+      div.textContent = msg;
+      logsEl.appendChild(div);
+      logsEl.scrollTop = logsEl.scrollHeight;
+    };
+
+    async function start() {
+      const category = document.getElementById("category").value.trim();
+      if (!category) {
+        alert("Please enter a category ID");
+        return;
+      }
+      try {
+        const res = await fetch("/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ category })
+        });
+        const data = await res.json();
+        alert(data.message || data.error);
+      } catch (err) {
+        alert("Error starting bot");
+      }
+    }
+
+    async function stop() {
+      try {
+        const res = await fetch("/stop", { method: "POST" });
+        const data = await res.json();
+        alert(data.message);
+      } catch (err) {
+        alert("Error stopping bot");
+      }
+    }
+
+    async function status() {
+      try {
+        const res = await fetch("/status");
+        const data = await res.json();
+        statusBox.textContent =
+          `Running: ${data.running} | Slots: ${data.usedSlots}/${data.maxSlots} | Categories: ${data.categories.join(", ")}`;
+      } catch (err) {
+        statusBox.textContent = "Error fetching status";
+      }
+    }
+  </script>
+</body>
+</html>
