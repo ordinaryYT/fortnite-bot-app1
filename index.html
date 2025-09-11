@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>OGbots</title>
+  <title>OGbots Control Panel</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
     :root {
@@ -50,6 +50,8 @@
     .bot-name { font-weight: 600; }
     .bot-status { font-size: 0.8rem; padding: 0.3rem 0.8rem; border-radius: 20px; background: var(--accent-green); color: white; }
     .hidden { display: none; }
+    .category-list { margin-top: 1rem; }
+    .category-item { padding: 0.5rem; background: var(--secondary-bg); margin-bottom: 0.5rem; border-radius: 6px; display: flex; justify-content: space-between; }
   </style>
 </head>
 <body>
@@ -61,140 +63,4 @@
   </header>
 
   <div class="main-container">
-    <nav class="sidebar">
-      <div class="nav-item active" onclick="showView('dashboard')"><i class="fas fa-home"></i><span>Dashboard</span></div>
-      <div class="nav-item" onclick="showView('mybots')"><i class="fas fa-server"></i><span>My Bots</span></div>
-      <div class="nav-item" onclick="showView('public')"><i class="fas fa-globe"></i><span>Public Bots</span></div>
-    </nav>
-
-    <main class="content">
-      <section id="dashboard-view">
-        <h1 class="section-title"><i class="fas fa-tachometer-alt"></i> Dashboard</h1>
-        <div class="card">
-          <h2 class="card-title">Bot Control</h2>
-          <div class="input-group">
-            <label for="botId">Bot ID</label>
-            <input type="text" id="botId" placeholder="Enter bot ID">
-          </div>
-          <div class="status-indicator">
-            <div class="status-dot" id="statusDot"></div>
-            <span id="statusDisplay">Status: Unknown</span>
-          </div>
-          <div class="btn-group">
-            <button class="btn btn-primary" onclick="start()"><i class="fas fa-play"></i> Start</button>
-            <button class="btn btn-danger" onclick="stop()"><i class="fas fa-stop"></i> Stop</button>
-            <button class="btn btn-info" onclick="status()"><i class="fas fa-sync"></i> Refresh Status</button>
-          </div>
-        </div>
-        <div class="log-container">
-          <div class="log-header">Live Logs</div>
-          <div class="log-content" id="output"></div>
-        </div>
-      </section>
-
-      <section id="mybots-view" class="hidden">
-        <h1 class="section-title"><i class="fas fa-server"></i> My Bots <span id="myBotsCount"></span></h1>
-        <div class="bot-grid" id="myBotsList"></div>
-      </section>
-
-      <section id="public-view" class="hidden">
-        <h1 class="section-title"><i class="fas fa-globe"></i> Public Bots</h1>
-        <button class="btn btn-info" onclick="requestPublicBot()">Request Public Bot</button>
-        <div class="bot-grid" id="publicBotsList"></div>
-      </section>
-    </main>
-  </div>
-
-  <script>
-    function showView(view) {
-      document.querySelectorAll("main section").forEach(s => s.classList.add("hidden"));
-      document.getElementById(view+"-view").classList.remove("hidden");
-      document.querySelectorAll(".nav-item").forEach(i=>i.classList.remove("active"));
-      document.querySelector(`.nav-item[onclick="showView('${view}')"]`).classList.add("active");
-
-      if(view === "mybots") updateStatus();
-      if(view === "public") buildPublicBots();
-    }
-
-    function appendLog(data) {
-      const output = document.getElementById("output");
-      output.textContent += data + "\\n";
-      output.scrollTop = output.scrollHeight;
-    }
-
-    async function start() {
-      const botId=document.getElementById("botId").value;
-      if(!botId){alert("Enter a bot ID");return;}
-      const res=await fetch("/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({botId})});
-      const data=await res.json();
-      appendLog(JSON.stringify(data));
-      updateStatus();
-    }
-
-    async function stop() {
-      const res=await fetch("/stop",{method:"POST"});
-      const data=await res.json();
-      appendLog(JSON.stringify(data));
-      updateStatus();
-    }
-
-    async function status() {
-      const res=await fetch("/status");
-      const data=await res.json();
-      appendLog(JSON.stringify(data));
-      updateStatus();
-    }
-
-    async function updateStatus() {
-      const res=await fetch("/status");
-      const data=await res.json();
-      const display=document.getElementById("statusDisplay");
-      const dot=document.getElementById("statusDot");
-      display.textContent=data.running?`Running: ${data.count}/10`:"Status: Stopped";
-      if(data.running){dot.classList.add("running");} else {dot.classList.remove("running");}
-      renderMyBots(data.count);
-    }
-
-    function renderMyBots(count){
-      const container=document.getElementById("myBotsList");
-      container.innerHTML="";
-      for(let i=1;i<=count;i++){
-        const div=document.createElement("div");
-        div.className="bot-card";
-        div.innerHTML=`<div class="bot-header"><div class="bot-name">OGprivatebot${i}</div><div class="bot-status">Running</div></div>`;
-        container.appendChild(div);
-      }
-      document.getElementById("myBotsCount").textContent=`Running: ${count}/10`;
-    }
-
-    function buildPublicBots(){
-      const container=document.getElementById("publicBotsList");
-      container.innerHTML="";
-      for(let i=1;i<=75;i++){
-        const div=document.createElement("div");
-        div.className="bot-card";
-        div.innerHTML=`<div class="bot-header"><div class="bot-name">OGsbot${i}</div><div class="bot-status">Running</div></div>`;
-        container.appendChild(div);
-      }
-    }
-
-    function requestPublicBot(){
-      const container=document.getElementById("publicBotsList");
-      const div=document.createElement("div");
-      div.className="bot-card";
-      div.innerHTML=`<div class="bot-header"><div class="bot-name">Public Bot</div><div class="bot-status">Running</div></div><p>ID: 67c2fd571906bd75e5239684</p>`;
-      container.appendChild(div);
-    }
-
-    function initLogStream(){
-      const source=new EventSource("/logs");
-      source.onmessage=(event)=>appendLog(event.data);
-    }
-
-    // Init
-    updateStatus();
-    setInterval(updateStatus,5000);
-    initLogStream();
-  </script>
-</body>
-</html>
+   
