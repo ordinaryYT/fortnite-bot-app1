@@ -10,8 +10,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Serve frontend
-app.use(express.static(path.join(__dirname, "public")));
+// Serve HTML file directly
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
+});
 
 let worker = null;
 let categories = [];
@@ -194,37 +196,47 @@ process.stdout.write = (chunk, encoding, callback) => {
 
 // --- Worker functions with multi-category support ---
 async function startWorker(token) {
-  const FNLB = await import("fnlb");
-  const fnlb = new FNLB.default();
+  try {
+    const FNLB = await import("fnlb");
+    const fnlb = new FNLB.default();
 
-  async function start() {
-    await fnlb.start({
-      apiToken: token,
-      numberOfShards: 1,
-      botsPerShard: 10,
-      categories,
-      logLevel: "INFO",
-    });
-  }
+    async function start() {
+      await fnlb.start({
+        apiToken: token,
+        numberOfShards: 1,
+        botsPerShard: 10,
+        categories,
+        logLevel: "INFO",
+      });
+    }
 
-  async function restart() {
-    console.log("🔄 Restarting worker...");
-    try { await fnlb.stop(); } catch (e) { console.warn("fnlb stop error:", e); }
+    async function restart() {
+      console.log("🔄 Restarting worker...");
+      try { await fnlb.stop(); } catch (e) { console.warn("fnlb stop error:", e); }
+      await start();
+    }
+
     await start();
+    const interval = setInterval(restart, 3600000);
+    worker = { fnlb, interval };
+    return true;
+  } catch (error) {
+    console.error("Failed to start worker:", error);
+    return false;
   }
-
-  await start();
-  const interval = setInterval(restart, 3600000);
-  worker = { fnlb, interval };
 }
 
 async function stopWorker() {
   if (worker) {
     clearInterval(worker.interval);
-    try { await worker.fnlb.stop(); } catch (e) { console.warn("fnlb stop error:", e); }
+    try { 
+      await worker.fnlb.stop(); 
+      console.log("🛑 Worker stopped");
+    } catch (e) { 
+      console.warn("fnlb stop error:", e); 
+    }
     worker = null;
     categories = [];
-    console.log("🛑 Worker stopped");
     return true;
   }
   return false;
@@ -244,12 +256,11 @@ app.post("/start", async (req, res) => {
   if (!categories.includes(category)) categories.push(category);
 
   if (!worker) {
-    try {
-      await startWorker(token);
+    const started = await startWorker(token);
+    if (started) {
       console.log(`✅ Worker started with category ${category}`);
       res.json({ success: true, categories });
-    } catch (err) {
-      console.error(err);
+    } else {
       res.status(500).json({ error: "Failed to start worker" });
     }
   } else {
@@ -268,7 +279,7 @@ app.post("/start", async (req, res) => {
 
 app.post("/stop", async (req, res) => {
   const stopped = await stopWorker();
-  if (stopped) res.json({ success: true });
+  if (stopped) res.json({ success: true, message: "Worker stopped" });
   else res.json({ success: false, message: "No worker running" });
 });
 
