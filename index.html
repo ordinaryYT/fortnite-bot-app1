@@ -3,228 +3,61 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>OGbots Control Panel</title>
+  <title>Bot Control Panel</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    :root {
-      --primary-bg: #0f0f23;
-      --secondary-bg: #1c1c38;
-      --card-bg: #252547;
-      --accent-purple: #6e40c9;
-      --accent-blue: #2b7cff;
-      --accent-green: #21c974;
-      --accent-red: #ff4365;
-      --text-primary: #ffffff;
-      --text-secondary: #a0a0c0;
-      --border-color: #3a3a62;
-    }
-    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-    body { background: var(--primary-bg); color: var(--text-primary); min-height: 100vh; display: flex; flex-direction: column; }
-    .header { background: var(--secondary-bg); padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); }
-    .logo { display: flex; align-items: center; gap: 0.8rem; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); }
-    .logo i { color: var(--accent-purple); }
-    .main-container { display: flex; flex: 1; }
-    .sidebar { width: 250px; background: var(--secondary-bg); padding: 1.5rem 0; border-right: 1px solid var(--border-color); display: flex; flex-direction: column; }
-    .nav-item { padding: 0.9rem 1.5rem; display: flex; align-items: center; gap: 0.8rem; color: var(--text-secondary); cursor: pointer; border-left: 4px solid transparent; }
-    .nav-item:hover, .nav-item.active { background: rgba(110, 64, 201, 0.1); color: var(--text-primary); border-left-color: var(--accent-purple); }
-    .content { flex: 1; padding: 2rem; overflow-y: auto; }
-    .section-title { font-size: 1.4rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.8rem; }
-    .card { background: var(--card-bg); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
-    .input-group { margin-bottom: 1.2rem; }
-    .input-group label { display: block; margin-bottom: 0.5rem; color: var(--text-secondary); }
-    .input-group input { width: 100%; padding: 0.8rem 1rem; border-radius: 8px; border: 1px solid var(--border-color); background: var(--secondary-bg); color: var(--text-primary); }
-    .status-indicator { display: flex; align-items: center; gap: 0.5rem; margin: 1rem 0; padding: 0.8rem; border-radius: 8px; background: var(--secondary-bg); }
-    .status-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent-red); }
-    .status-dot.running { background: var(--accent-green); }
-    .btn-group { display: flex; gap: 1rem; margin-top: 1.5rem; }
-    .btn { padding: 0.8rem 1.5rem; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; }
-    .btn-primary { background: var(--accent-purple); color: white; }
-    .btn-danger { background: var(--accent-red); color: white; }
-    .btn-info { background: var(--accent-blue); color: white; }
-    .log-container { background: var(--secondary-bg); border-radius: 12px; overflow: hidden; }
-    .log-header { padding: 1rem 1.5rem; background: rgba(0,0,0,0.2); }
-    .log-content { padding: 1rem; height: 300px; overflow-y: auto; font-family: 'Consolas', monospace; font-size: 0.9rem; }
-    .bot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.5rem; }
-    .bot-card { background: var(--card-bg); border-radius: 12px; overflow: hidden; }
-    .bot-header { padding: 1rem; background: rgba(110, 64, 201, 0.2); display: flex; justify-content: space-between; align-items: center; }
-    .bot-name { font-weight: 600; }
-    .bot-status { font-size: 0.8rem; padding: 0.3rem 0.8rem; border-radius: 20px; background: var(--accent-green); color: white; }
-    .hidden { display: none; }
-    .category-list { margin-top: 1rem; }
-    .category-item { padding: 0.5rem; background: var(--secondary-bg); margin-bottom: 0.5rem; border-radius: 6px; display: flex; justify-content: space-between; }
-    .slots-indicator { margin: 1rem 0; font-weight: 600; }
+    body { background:#0f0f23; color:white; font-family:sans-serif; margin:0; padding:0; }
+    header { background:#1c1c38; padding:1rem 2rem; font-size:1.5rem; font-weight:700; border-bottom:1px solid #333; }
+    .container { padding:2rem; }
+    .card { background:#252547; padding:1.5rem; border-radius:12px; margin-bottom:1.5rem; }
+    .log-container { background:#1c1c38; border-radius:12px; overflow:hidden; }
+    .log-header { padding:1rem; background:rgba(0,0,0,0.2); }
+    .log-content { padding:1rem; height:300px; overflow-y:auto; font-family:Consolas, monospace; font-size:0.9rem; }
+    .input-group { margin-bottom:1.2rem; }
+    .input-group input { width:100%; padding:0.8rem 1rem; border-radius:8px; border:1px solid #444; background:#1c1c38; color:white; }
+    .btn { padding:0.8rem 1.5rem; border-radius:8px; border:none; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:0.5rem; }
+    .btn-primary { background:#6e40c9; color:white; }
   </style>
 </head>
 <body>
-  <header class="header">
-    <div class="logo">
-      <i class="fas fa-robot"></i>
-      <span>OGbots</span>
-    </div>
+  <header>
+    <i class="fas fa-robot"></i> Bot Control Panel
   </header>
 
-  <div class="main-container">
-    <nav class="sidebar">
-      <div class="nav-item active" onclick="showView('dashboard')"><i class="fas fa-home"></i><span>Dashboard</span></div>
-      <div class="nav-item" onclick="showView('mybots')"><i class="fas fa-server"></i><span>My Bots</span></div>
-      <div class="nav-item" onclick="showView('public')"><i class="fas fa-globe"></i><span>Public Bots</span></div>
-    </nav>
+  <div class="container">
+    <div class="log-container">
+      <div class="log-header">Live Logs</div>
+      <div class="log-content" id="output"></div>
+    </div>
 
-    <main class="content">
-      <section id="dashboard-view">
-        <h1 class="section-title"><i class="fas fa-tachometer-alt"></i> Dashboard</h1>
-        <div class="card">
-          <h2 class="card-title">Bot Control</h2>
-          <div class="input-group">
-            <label for="category">Category ID</label>
-            <input type="text" id="category" placeholder="Enter category ID">
-          </div>
-          <div class="status-indicator">
-            <div class="status-dot" id="statusDot"></div>
-            <span id="statusDisplay">Status: Unknown</span>
-          </div>
-          <div class="slots-indicator" id="slotsDisplay">Slots: 0/10</div>
-          <div class="category-list" id="categoryList"></div>
-          <div class="btn-group">
-            <button class="btn btn-primary" onclick="start()"><i class="fas fa-play"></i> Start</button>
-            <button class="btn btn-danger" onclick="stop()"><i class="fas fa-stop"></i> Stop</button>
-            <button class="btn btn-info" onclick="status()"><i class="fas fa-sync"></i> Refresh Status</button>
-          </div>
-        </div>
-        <div class="log-container">
-          <div class="log-header">Live Logs</div>
-          <div class="log-content" id="output"></div>
-        </div>
-      </section>
-
-      <section id="mybots-view" class="hidden">
-        <h1 class="section-title"><i class="fas fa-server"></i> My Bots <span id="myBotsCount"></span></h1>
-        <div class="bot-grid" id="myBotsList"></div>
-      </section>
-
-      <section id="public-view" class="hidden">
-        <h1 class="section-title"><i class="fas fa-globe"></i> Public Bots</h1>
-        <button class="btn btn-info" onclick="requestPublicBot()">Request Public Bot</button>
-        <div class="bot-grid" id="publicBotsList"></div>
-      </section>
-    </main>
+    <div class="card">
+      <h2>Command Box</h2>
+      <div class="input-group">
+        <input type="text" id="commandInput" placeholder="Enter command here..." />
+      </div>
+      <button class="btn btn-primary" onclick="sendCommand()">
+        <i class="fas fa-terminal"></i> Send Command
+      </button>
+    </div>
   </div>
 
   <script>
-    function showView(view) {
-      document.querySelectorAll("main section").forEach(s => s.classList.add("hidden"));
-      document.getElementById(view+"-view").classList.remove("hidden");
-      document.querySelectorAll(".nav-item").forEach(i=>i.classList.remove("active"));
-      document.querySelector(`.nav-item[onclick="showView('${view}')"]`).classList.add("active");
-
-      if(view === "mybots") updateStatus();
-      if(view === "public") buildPublicBots();
-    }
-
     function appendLog(data) {
       const output = document.getElementById("output");
       output.textContent += data + "\n";
       output.scrollTop = output.scrollHeight;
     }
 
-    async function start() {
-      const category = document.getElementById("category").value;
-      if(!category){alert("Enter a category ID");return;}
-      const res = await fetch("/start", {
+    async function sendCommand() {
+      const cmd = document.getElementById("commandInput").value.trim();
+      if (!cmd) return;
+      appendLog("➡️ Sending command: " + cmd);
+      await fetch("/command", {
         method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({category})
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command: cmd })
       });
-      const data = await res.json();
-      appendLog(JSON.stringify(data));
-      updateStatus();
-    }
-
-    async function stop() {
-      const res = await fetch("/stop", {method: "POST"});
-      const data = await res.json();
-      appendLog(JSON.stringify(data));
-      updateStatus();
-    }
-
-    async function status() {
-      const res = await fetch("/status");
-      const data = await res.json();
-      appendLog(JSON.stringify(data));
-      updateStatus();
-    }
-
-    async function updateStatus() {
-      try {
-        const res = await fetch("/status");
-        const data = await res.json();
-        const display = document.getElementById("statusDisplay");
-        const dot = document.getElementById("statusDot");
-        const slots = document.getElementById("slotsDisplay");
-        
-        display.textContent = data.running ? "Status: Running" : "Status: Stopped";
-        slots.textContent = `Slots: ${data.slotsUsed}/${data.slotsMax}`;
-        
-        if(data.running) {
-          dot.classList.add("running");
-        } else {
-          dot.classList.remove("running");
-        }
-        
-        // Update category list
-        const categoryList = document.getElementById("categoryList");
-        categoryList.innerHTML = "";
-        
-        if (data.categories && data.categories.length > 0) {
-          const title = document.createElement("div");
-          title.textContent = "Active Categories:";
-          title.style.marginBottom = "0.5rem";
-          title.style.fontWeight = "bold";
-          categoryList.appendChild(title);
-          
-          data.categories.forEach(cat => {
-            const item = document.createElement("div");
-            item.className = "category-item";
-            item.textContent = cat;
-            categoryList.appendChild(item);
-          });
-        }
-        
-        renderMyBots(data.slotsUsed);
-      } catch (error) {
-        console.error("Failed to update status:", error);
-      }
-    }
-
-    function renderMyBots(count){
-      const container = document.getElementById("myBotsList");
-      container.innerHTML = "";
-      for(let i = 1; i <= count; i++){
-        const div = document.createElement("div");
-        div.className = "bot-card";
-        div.innerHTML = `<div class="bot-header"><div class="bot-name">OGprivatebot${i}</div><div class="bot-status">Running</div></div>`;
-        container.appendChild(div);
-      }
-      document.getElementById("myBotsCount").textContent = `Running: ${count}/10`;
-    }
-
-    function buildPublicBots(){
-      const container = document.getElementById("publicBotsList");
-      container.innerHTML = "";
-      for(let i = 1; i <= 75; i++){
-        const div = document.createElement("div");
-        div.className = "bot-card";
-        div.innerHTML = `<div class="bot-header"><div class="bot-name">OGsbot${i}</div><div class="bot-status">Running</div></div>`;
-        container.appendChild(div);
-      }
-    }
-
-    function requestPublicBot(){
-      const container = document.getElementById("publicBotsList");
-      const div = document.createElement("div");
-      div.className = "bot-card";
-      div.innerHTML = `<div class="bot-header"><div class="bot-name">Public Bot</div><div class="bot-status">Running</div></div><p>ID: 67c2fd571906bd75e5239684</p>`;
-      container.appendChild(div);
+      document.getElementById("commandInput").value = "";
     }
 
     function initLogStream(){
@@ -232,13 +65,10 @@
       source.onmessage = (event) => appendLog(event.data);
       source.onerror = (error) => {
         console.error("SSE connection error:", error);
-        setTimeout(initLogStream, 5000); // Reconnect after 5 seconds
+        setTimeout(initLogStream, 5000);
       };
     }
 
-    // Init
-    updateStatus();
-    setInterval(updateStatus, 5000);
     initLogStream();
   </script>
 </body>
