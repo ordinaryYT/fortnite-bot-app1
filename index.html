@@ -1,127 +1,128 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>OGbot Panel</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OGbot Control Panel</title>
   <style>
-    body { margin:0; font-family:Arial, sans-serif; background:#0d1117; color:#c9d1d9; }
-    header { background:#161b22; padding:1rem; text-align:center; color:#58a6ff; font-weight:bold; }
-    nav { display:flex; justify-content:center; gap:1rem; background:#21262d; padding:0.5rem; }
-    nav button { background:#30363d; border:none; padding:0.5rem 1rem; color:#c9d1d9; border-radius:6px; cursor:pointer; }
-    nav button.active { background:#58a6ff; color:#fff; }
-    main { padding:1rem; }
-    .hidden { display:none; }
-    .panel { background:#161b22; padding:1rem; border-radius:8px; margin-bottom:1rem; }
-    .logs { background:#0d1117; border:1px solid #30363d; padding:0.5rem; height:250px; overflow-y:auto; font-family:monospace; }
-    input, button.action { margin-top:0.5rem; padding:0.5rem; border-radius:6px; border:none; }
-    input { width:100%; background:#0d1117; border:1px solid #30363d; color:#c9d1d9; }
-    button.action { background:#238636; color:#fff; cursor:pointer; }
-    button.stop { background:#da3633; }
-    ul { list-style:none; padding:0; }
-    li { padding:0.25rem 0; }
+    /* same styles you pasted earlier */
   </style>
 </head>
 <body>
-  <header>⚡ OGbot Panel</header>
-  <nav>
-    <button id="homeBtn" class="active" onclick="showPage('home')">Home</button>
-    <button id="myBotsBtn" onclick="showPage('myBots')">My Bots</button>
-    <button id="publicBotsBtn" onclick="showPage('publicBots')">Public Bots</button>
-  </nav>
-  <main>
-    <section id="home" class="page">
-      <div class="panel">
-        <h2>Controls</h2>
-        <input type="text" id="category" placeholder="Enter category ID..."/>
-        <button class="action" onclick="start()">Start</button>
-        <button class="action stop" onclick="stop()">Stop</button>
-        <button class="action" onclick="status()">Check Status</button>
-        <div id="statusBox"></div>
-      </div>
-      <div class="panel">
-        <h2>Running Bots</h2>
-        <div id="logs" class="logs"></div>
-      </div>
-    </section>
-    <section id="myBots" class="page hidden">
-      <div class="panel">
-        <h2>My Bots</h2>
-        <h3>Running</h3>
-        <ul id="runningList"></ul>
-        <h3>History</h3>
-        <ul id="historyList"></ul>
-      </div>
-    </section>
-    <section id="publicBots" class="page hidden">
-      <div class="panel">
-        <h2>Public Bots</h2>
-        <ul id="publicList"></ul>
-      </div>
-    </section>
-  </main>
+<header>
+  <h1>OGbot Control Panel</h1>
+  <div class="user">OrdinaryYT</div>
+</header>
 
-  <script>
-    // Navigation
-    function showPage(page) {
-      document.querySelectorAll(".page").forEach(p => p.classList.add("hidden"));
-      document.querySelectorAll("nav button").forEach(b => b.classList.remove("active"));
-      document.getElementById(page).classList.remove("hidden");
-      document.getElementById(page + "Btn").classList.add("active");
-      if (page === "myBots") loadMyBots();
-      if (page === "publicBots") loadPublicBots();
-    }
+<nav>
+  <button id="homeBtn" class="active" onclick="showPage('home')">Home</button>
+  <button id="myBotsBtn" onclick="showPage('myBots')">My Bots</button>
+  <button id="publicBotsBtn" onclick="showPage('publicBots')">Public Bots</button>
+</nav>
 
-    // Logs via WebSocket
-    const logsEl = document.getElementById("logs");
-    const wsProtocol = location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(wsProtocol + "://" + location.host);
-    ws.onmessage = (event) => {
-      const div = document.createElement("div");
-      div.textContent = event.data;
-      logsEl.appendChild(div);
-      logsEl.scrollTop = logsEl.scrollHeight;
-    };
+<main>
+  <div id="home" class="page">
+    <h2>Running Bots</h2>
+    <div class="bot-list" id="runningBots"></div>
+  </div>
 
-    async function start() {
-      const category = document.getElementById("category").value.trim();
-      if (!category) return alert("Enter a category ID");
-      const res = await fetch("/start", {
-        method:"POST", headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ category })
-      });
-      const data = await res.json();
-      alert(data.message || data.error);
-    }
+  <div id="myBots" class="page" style="display:none;">
+    <h2>My Bots</h2>
+    <div class="bot-list" id="myBotsList"></div>
+    <div class="category-input">
+      <input type="text" id="categoryInput" placeholder="Enter category ID">
+      <button onclick="startBot()">Start Bot</button>
+      <button style="background:#f44336;" onclick="stopBot()">Stop All</button>
+    </div>
+  </div>
 
-    async function stop() {
-      const res = await fetch("/stop", { method:"POST" });
-      const data = await res.json();
-      alert(data.message);
-    }
+  <div id="publicBots" class="page" style="display:none;">
+    <h2>Public Bots</h2>
+    <div class="bot-list" id="publicBotsList"></div>
+  </div>
 
-    async function status() {
-      const res = await fetch("/status");
-      const data = await res.json();
-      document.getElementById("statusBox").textContent =
-        `Running: ${data.running} | Slots: ${data.usedSlots}/${data.maxSlots}`;
-    }
+  <pre id="output"></pre>
+</main>
 
-    async function loadMyBots() {
-      const res = await fetch("/status");
-      const data = await res.json();
-      document.getElementById("runningList").innerHTML =
-        data.runningCategories.map(c => `<li>${c}</li>`).join("");
-      document.getElementById("historyList").innerHTML =
-        data.history.map(c => `<li>${c}</li>`).join("");
-    }
+<script>
+  let runningBots = [];
+  let myBotsHistory = [];
+  const publicBots = Array.from({length:75}, (_, i) => `OGsbot${i+1}`);
 
-    async function loadPublicBots() {
-      const res = await fetch("/public-bots");
-      const data = await res.json();
-      document.getElementById("publicList").innerHTML =
-        data.bots.map(b => `<li>${b}</li>`).join("");
-    }
-  </script>
+  function showPage(page) {
+    document.querySelectorAll('.page').forEach(p => p.style.display='none');
+    document.getElementById(page).style.display='block';
+    document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+    document.getElementById(page+'Btn').classList.add('active');
+    renderLists();
+  }
+
+  function renderLists() {
+    const rb = document.getElementById('runningBots');
+    rb.innerHTML = '';
+    runningBots.forEach(bot => {
+      const div = document.createElement('div');
+      div.className = 'bot-card';
+      div.textContent = bot;
+      rb.appendChild(div);
+    });
+
+    const mb = document.getElementById('myBotsList');
+    mb.innerHTML = '';
+    myBotsHistory.forEach(bot => {
+      const div = document.createElement('div');
+      div.className = 'bot-card';
+      div.innerHTML = `${bot.id}<br><span class="${bot.running?'status-running':'status-stopped'}">${bot.running?'Running':'Stopped'}</span>`;
+      mb.appendChild(div);
+    });
+
+    const pb = document.getElementById('publicBotsList');
+    pb.innerHTML = '';
+    publicBots.forEach(bot => {
+      const div = document.createElement('div');
+      div.className = 'bot-card';
+      div.textContent = bot;
+      pb.appendChild(div);
+    });
+  }
+
+  async function fetchStatus() {
+    const res = await fetch('/status');
+    const data = await res.json();
+    runningBots = data.running ? data.categories : [];
+    myBotsHistory = data.categories.map(c => ({
+      id: c,
+      running: runningBots.includes(c)
+    }));
+    renderLists();
+  }
+
+  async function startBot() {
+    const category = document.getElementById('categoryInput').value.trim();
+    if (!category) return;
+    await fetch('/start', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({category})
+    });
+    fetchStatus();
+  }
+
+  async function stopBot() {
+    await fetch('/stop', {method:'POST'});
+    fetchStatus();
+  }
+
+  // Live logs
+  const output = document.getElementById('output');
+  const ws = new WebSocket(`ws://${location.host}/logs`);
+  ws.onmessage = e => {
+    output.textContent += e.data + "\n";
+    output.scrollTop = output.scrollHeight;
+  };
+
+  setInterval(fetchStatus, 5000);
+  fetchStatus();
+</script>
 </body>
 </html>
