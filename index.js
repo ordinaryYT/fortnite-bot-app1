@@ -11,40 +11,27 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// serve frontend
+app.use(express.static(path.join(__dirname, "public")));
+
 let OGbotClient = null;
-let categories = [];       // currently active categories
-let history = [];          // all categories ever used
+let categories = [];
 const MAX_SLOTS = 10;
 
-// --- Server + WebSocket for logs ---
-const server = app.listen(process.env.PORT || 10000, () =>
-  console.log(`✅ OGbot Control Server running on port ${process.env.PORT || 10000}`)
-);
-const wss = new WebSocketServer({ server });
-
-// --- Log patch ---
-const originalLog = console.log;
+// --- LOG SYSTEM (filter + replacements + broadcast) ---
+const clients = new Set();
+const origLog = console.log;
 console.log = (...args) => {
   const msg = args.join(" ");
-
-  // filter spammy playlist logs
-  if (msg.includes("playlist_")) return;
-
+  if (msg.includes("playlist_")) return; // filter playlists
   let formatted = msg
     .replace("Categories:", "Server:")
     .replace("Bots per Shard:", "Server Capacity:");
-
-  originalLog(formatted);
-
-  // broadcast to frontend
-  wss.clients.forEach((client) => {
-    if (client.readyState === 1) {
-      client.send(formatted);
-    }
-  });
+  origLog(formatted);
+  clients.forEach(ws => ws.send(formatted));
 };
 
-// --- OGbot Client ---
+// --- Worker (OGbot client) ---
 async function startOGbotClient(token) {
   const FNLB = await import("fnlb");
   const fnlb = new FNLB.default();
@@ -54,7 +41,7 @@ async function startOGbotClient(token) {
       apiToken: token,
       numberOfShards: 1,
       botsPerShard: 10,
-      categories: categories,
+      categories,
       logLevel: "INFO",
     });
   }
@@ -82,64 +69,59 @@ async function stopOGbotClient() {
   return false;
 }
 
-// --- API ROUTES ---
-
-// Start a bot slot
+// --- API routes ---
 app.post("/start", async (req, res) => {
   const { category } = req.body;
   const token = process.env.API_TOKEN;
 
   if (!token) return res.status(500).json({ error: "API_TOKEN missing" });
-  if (!category) return res.status(400).json({ error: "Category ID required" });
+  if (!category) return res.status(400).json({ error: "Category required" });
 
-  if (categories.length >= MAX_SLOTS) {
-    return res.status(400).json({ error: `❌ Server full (${MAX_SLOTS}/${MAX_SLOTS} slots used)` });
-  }
+  if (categories.length >= MAX_SLOTS)
+    return res.status(400).json({ error: "❌ Server full" });
 
-  if (categories.includes(category)) {
-    return res.status(400).json({ error: `⚠️ Category ${category} already in use` });
-  }
-
-  categories.push(category);
-  if (!history.includes(category)) history.push(category);
+  if (!categories.includes(category)) categories.push(category);
 
   if (!OGbotClient) {
-    try {
-      await startOGbotClient(token);
-      return res.json({ message: `🚀 OGbot client started with category ${category} (slot 1 of ${MAX_SLOTS})` });
-    } catch (err) {
-      console.error(err);
-      return res.status(500).json({ error: "Failed to start OGbot client" });
-    }
+    await startOGbotClient(token);
+    console.log(`✅ OGbot client started with category ${category}`);
   } else {
-    return res.json({ message: `✅ Category ${category} added (slot ${categories.length} of ${MAX_SLOTS})` });
+    console.log(`➕ Added category: ${category}`);
   }
+
+  res.json({ success: true, categories });
 });
 
-// Stop
 app.post("/stop", async (req, res) => {
   const stopped = await stopOGbotClient();
-  res.json({ message: stopped ? "🛑 OGbot client stopped" : "No active client" });
+  if (stopped) res.json({ success: true });
+  else res.json({ success: false, message: "No client running" });
 });
 
-// Status
 app.get("/status", (req, res) => {
   res.json({
     running: !!OGbotClient,
-    usedSlots: categories.length,
-    maxSlots: MAX_SLOTS,
-    runningCategories: categories,
-    history,
+    categories,
+    slotsUsed: categories.length,
+    slotsMax: MAX_SLOTS,
   });
 });
 
-// Public bots list
-app.get("/public-bots", (req, res) => {
-  const bots = Array.from({ length: 75 }, (_, i) => `OGsbot${i + 1}`);
-  res.json({ bots });
+// --- WebSocket for live logs ---
+const wss = new WebSocketServer({ noServer: true });
+wss.on("connection", ws => {
+  clients.add(ws);
+  ws.on("close", () => clients.delete(ws));
 });
 
-// Serve frontend
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "index.html"));
+// integrate WS with HTTP server
+const server = app.listen(3000, () => {
+  console.log("🚀 Server running on port 3000");
+});
+server.on("upgrade", (req, socket, head) => {
+  if (req.url === "/logs") {
+    wss.handleUpgrade(req, socket, head, ws => {
+      wss.emit("connection", ws, req);
+    });
+  }
 });
