@@ -1,19 +1,18 @@
 {
   "name": "ogbots-server",
   "version": "1.0.0",
-  "description": "OGbots Control Panel Server",
+  "description": "OGbots Control Panel Server with FNLB + Command Chatbox",
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "node index.js",
-    "dev": "node index.js"
+    "start": "node index.js"
   },
   "dependencies": {
     "express": "^4.18.2",
     "cors": "^2.8.5",
     "fnlb": "^1.0.0"
   },
-  "keywords": ["bots", "control", "panel"],
-  "author": "OGbots",
-  "license": "MIT"
+  "engines": {
+    "node": ">=14.0.0"
+  }
 }
