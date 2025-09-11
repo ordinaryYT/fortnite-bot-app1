@@ -11,8 +11,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// serve frontend
-app.use(express.static(path.join(__dirname, "public")));
+// serve index.html at root
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
+});
 
 let OGbotClient = null;
 let categories = [];
