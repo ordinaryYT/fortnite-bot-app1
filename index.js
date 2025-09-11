@@ -12,7 +12,8 @@ app.use(cors());
 app.use(express.json());
 
 let OGbotClient = null;
-let categories = []; // dynamic slots
+let categories = [];       // currently active categories
+let history = [];          // all categories ever used
 const MAX_SLOTS = 10;
 
 // --- Server + WebSocket for logs ---
@@ -26,18 +27,16 @@ const originalLog = console.log;
 console.log = (...args) => {
   const msg = args.join(" ");
 
-  // filter out playlist spam
+  // filter spammy playlist logs
   if (msg.includes("playlist_")) return;
 
-  // replace words for cleaner logs
   let formatted = msg
     .replace("Categories:", "Server:")
     .replace("Bots per Shard:", "Server Capacity:");
 
-  // print to Render logs
   originalLog(formatted);
 
-  // broadcast logs to frontend clients
+  // broadcast to frontend
   wss.clients.forEach((client) => {
     if (client.readyState === 1) {
       client.send(formatted);
@@ -54,8 +53,8 @@ async function startOGbotClient(token) {
     await fnlb.start({
       apiToken: token,
       numberOfShards: 1,
-      botsPerShard: 10,       // runs 10 bots per shard
-      categories: categories, // dynamic list of category IDs
+      botsPerShard: 10,
+      categories: categories,
       logLevel: "INFO",
     });
   }
@@ -85,7 +84,7 @@ async function stopOGbotClient() {
 
 // --- API ROUTES ---
 
-// Add a category slot + start if not running
+// Start a bot slot
 app.post("/start", async (req, res) => {
   const { category } = req.body;
   const token = process.env.API_TOKEN;
@@ -102,6 +101,7 @@ app.post("/start", async (req, res) => {
   }
 
   categories.push(category);
+  if (!history.includes(category)) history.push(category);
 
   if (!OGbotClient) {
     try {
@@ -116,20 +116,27 @@ app.post("/start", async (req, res) => {
   }
 });
 
-// Stop client
+// Stop
 app.post("/stop", async (req, res) => {
   const stopped = await stopOGbotClient();
   res.json({ message: stopped ? "🛑 OGbot client stopped" : "No active client" });
 });
 
-// Status check
+// Status
 app.get("/status", (req, res) => {
   res.json({
     running: !!OGbotClient,
     usedSlots: categories.length,
     maxSlots: MAX_SLOTS,
-    categories,
+    runningCategories: categories,
+    history,
   });
+});
+
+// Public bots list
+app.get("/public-bots", (req, res) => {
+  const bots = Array.from({ length: 75 }, (_, i) => `OGsbot${i + 1}`);
+  res.json({ bots });
 });
 
 // Serve frontend
