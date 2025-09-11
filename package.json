@@ -1,14 +1,19 @@
 {
-  "name": "fnlb-render-app",
+  "name": "ogbots-server",
   "version": "1.0.0",
+  "description": "OGbots Control Panel Server",
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "node index.js"
   },
   "dependencies": {
     "express": "^4.18.2",
     "cors": "^2.8.5",
     "fnlb": "^1.0.0"
-  }
+  },
+  "keywords": ["bots", "control", "panel"],
+  "author": "OGbots",
+  "license": "MIT"
 }
