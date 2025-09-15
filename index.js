@@ -1,131 +1,124 @@
-function showView(view) {
-  document.querySelectorAll("main section").forEach(s => s.classList.add("hidden"));
-  document.getElementById(view+"-view").classList.remove("hidden");
-  document.querySelectorAll(".nav-item").forEach(i=>i.classList.remove("active"));
-  document.querySelector(`.nav-item[onclick="showView('${view}')"]`).classList.add("active");
+import express from "express";
+import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
 
-  if(view === "mybots") updateStatus();
-  if(view === "public") buildPublicBots();
-}
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-function appendLog(data) {
-  const output = document.getElementById("output");
-  output.textContent += data + "\n";
-  output.scrollTop = output.scrollHeight;
-}
+const app = express();
+app.use(cors());
+app.use(express.json());
 
-async function start() {
-  const userId = document.getElementById("userId").value;
-  const username = document.getElementById("username").value || "OGprivatebot";
-  if(!userId){alert("Enter a User ID");return;}
+// Serve HTML file
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
+});
 
-  const res = await fetch("/start", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ category: userId })
-  });
-  const data = await res.json();
-  appendLog(JSON.stringify(data));
-  updateStatus(username);
-}
+let worker = null;
+let categories = [];
+const MAX_SLOTS = 10;
+let logListeners = [];
 
-async function stop() {
-  const res = await fetch("/stop", {method: "POST"});
-  const data = await res.json();
-  appendLog(JSON.stringify(data));
-  updateStatus();
-}
-
-async function status() {
-  const res = await fetch("/status");
-  const data = await res.json();
-  appendLog(JSON.stringify(data));
-  updateStatus();
-}
-
-async function updateStatus(username) {
+// ---- Worker management ----
+async function startWorker(token) {
   try {
-    const res = await fetch("/status");
-    const data = await res.json();
-    const display = document.getElementById("statusDisplay");
-    const dot = document.getElementById("statusDot");
-    const slots = document.getElementById("slotsDisplay");
-    
-    display.textContent = data.running ? "Status: Running" : "Status: Stopped";
-    slots.textContent = `Slots: ${data.slotsUsed}/${data.slotsMax}`;
-    
-    if(data.running) {
-      dot.classList.add("running");
-    } else {
-      dot.classList.remove("running");
-    }
-    
-    const categoryList = document.getElementById("categoryList");
-    categoryList.innerHTML = "";
-    
-    if (data.categories && data.categories.length > 0) {
-      const title = document.createElement("div");
-      title.textContent = "Active User IDs:";
-      title.style.marginBottom = "0.5rem";
-      title.style.fontWeight = "bold";
-      categoryList.appendChild(title);
-      
-      data.categories.forEach(cat => {
-        const item = document.createElement("div");
-        item.className = "category-item";
-        item.textContent = cat;
-        categoryList.appendChild(item);
+    const FNLB = await import("fnlb");
+    const fnlb = new FNLB.default();
+
+    async function start() {
+      await fnlb.start({
+        apiToken: token,
+        numberOfShards: 1,
+        botsPerShard: 10,
+        categories,
+        logLevel: "INFO",
       });
     }
-    
-    renderMyBots(data.slotsUsed, username);
+
+    async function restart() {
+      console.log("🔄 Restarting worker...");
+      try { await fnlb.stop(); } catch (e) { console.warn("fnlb stop error:", e); }
+      await start();
+    }
+
+    await start();
+    const interval = setInterval(restart, 3600000);
+    worker = { fnlb, interval };
+    return true;
   } catch (error) {
-    console.error("Failed to update status:", error);
+    console.error("Failed to start worker:", error);
+    return false;
   }
 }
 
-function renderMyBots(count, username){
-  const container = document.getElementById("myBotsList");
-  container.innerHTML = "";
-  const name = username || (document.getElementById("username").value || "OGprivatebot");
-  for(let i = 1; i <= count; i++){
-    const div = document.createElement("div");
-    div.className = "bot-card";
-    div.innerHTML = `<div class="bot-header"><div class="bot-name">${name}${i}</div><div class="bot-status">Running</div></div>`;
-    container.appendChild(div);
+async function stopWorker() {
+  if (worker) {
+    clearInterval(worker.interval);
+    try { await worker.fnlb.stop(); } catch (e) { console.warn("fnlb stop error:", e); }
+    worker = null;
+    categories = [];
+    return true;
   }
-  document.getElementById("myBotsCount").textContent = `Running: ${count}/10`;
+  return false;
 }
 
-function buildPublicBots(){
-  const container = document.getElementById("publicBotsList");
-  container.innerHTML = "";
-  for(let i = 1; i <= 75; i++){
-    const div = document.createElement("div");
-    div.className = "bot-card";
-    div.innerHTML = `<div class="bot-header"><div class="bot-name">OGsbot${i}</div><div class="bot-status">Running</div></div>`;
-    container.appendChild(div);
+// ---- API endpoints ----
+app.post("/start", async (req, res) => {
+  const { category } = req.body;
+  const token = process.env.API_TOKEN;
+
+  if (!token) return res.status(500).json({ error: "API_TOKEN missing" });
+  if (!category) return res.status(400).json({ error: "Category required" });
+
+  if (categories.length >= MAX_SLOTS)
+    return res.status(400).json({ error: "❌ Server full" });
+
+  if (!categories.includes(category)) categories.push(category);
+
+  if (!worker) {
+    const started = await startWorker(token);
+    if (started) res.json({ success: true, categories });
+    else res.status(500).json({ error: "Failed to start worker" });
+  } else {
+    try {
+      await stopWorker();
+      await startWorker(token);
+      res.json({ success: true, categories });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to update categories" });
+    }
   }
-}
+});
 
-function requestPublicBot(){
-  const container = document.getElementById("publicBotsList");
-  const div = document.createElement("div");
-  div.className = "bot-card";
-  div.innerHTML = `<div class="bot-header"><div class="bot-name">Public Bot</div><div class="bot-status">Running</div></div><p>ID: 67c2fd571906bd75e5239684</p>`;
-  container.appendChild(div);
-}
+app.post("/stop", async (req, res) => {
+  const stopped = await stopWorker();
+  if (stopped) res.json({ success: true, message: "Worker stopped" });
+  else res.json({ success: false, message: "No worker running" });
+});
 
-function initLogStream(){
-  const source = new EventSource("/logs");
-  source.onmessage = (event) => appendLog(event.data);
-  source.onerror = (error) => {
-    console.error("SSE connection error:", error);
-    setTimeout(initLogStream, 5000); // Reconnect after 5 seconds
-  };
-}
+app.get("/status", (req, res) => {
+  res.json({
+    running: !!worker,
+    categories,
+    slotsUsed: categories.length,
+    slotsMax: MAX_SLOTS,
+  });
+});
 
-// Init
-updateStatus();
-setInterval(updateStatus, 5000);
-initLogStream();
+app.get("/logs", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  logListeners.push(res);
+  req.on("close", () => {
+    logListeners = logListeners.filter((r) => r !== res);
+  });
+});
+
+// ---- Start server ----
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
