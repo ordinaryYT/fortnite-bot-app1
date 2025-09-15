@@ -38,17 +38,23 @@ function broadcastLog(rawMessage) {
     // 🔥 remove ALL mentions of "fnlb"
     clean = clean.replace(/fnlb/gi, "");
 
-    // filter out junk lines
-    if (/playlist_|Checking for updates|up to date|Finished loading/i.test(clean)) {
-      continue;
-    }
+    // 🕒 remove duplicate timestamps inside the message (like [10:45:24])
+    clean = clean.replace(/\[\d{2}:\d{2}:\d{2}\]/g, "").trim();
 
-    // friendly replacements
-    clean = clean.replace(/Cluster:/gi, "User:");
-    clean = clean.replace(/Categories: (\d+)/gi, "Server Space Usage: $1/10");
-    clean = clean.replace(/Bots per Shard:/gi, "Server Capacity:");
+    // --- Skip noisy logs you listed ---
+    if (/\[Gateway]/i.test(clean) && /Connecting/i.test(clean)) continue;
+    if (/ua:\s/i.test(clean)) continue;
+    if (/pb:\s/i.test(clean)) continue;
+    if (/hotfix/i.test(clean)) continue;
+    if (/netCLOverride/i.test(clean)) continue;
+    if (/netCL:/i.test(clean)) continue;
+    if (/playlistRevisions/i.test(clean)) continue;
 
-    if (!clean.trim()) continue; // skip empty lines after cleaning
+    // --- Replace lines you requested ---
+    clean = clean.replace(/Starting shard with ID:.*/i, "Starting OGbot");
+    clean = clean.replace(/categories:\s*/i, "User ID: ");
+
+    if (!clean.trim()) continue; // skip if empty after cleaning
 
     const out = `[${timestamp()}] ${clean}`;
     logListeners.forEach(res => {
