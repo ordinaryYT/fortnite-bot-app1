@@ -129,10 +129,16 @@
       const output = document.getElementById("output");
       if (typeof data === "object") {
         Object.entries(data).forEach(([key, value]) => {
-          output.textContent += \`[\${new Date().toLocaleTimeString()}] \${key}: \${value}\n\`;
+          output.textContent += `[${new Date().toLocaleTimeString()}] ${key}: ${value}\n`;
         });
       } else {
-        output.textContent += \`[\${new Date().toLocaleTimeString()}] \${data}\n\`;
+        String(data)
+          .split(/\r?\n/)
+          .forEach(line => {
+            if (line.trim()) {
+              output.textContent += `[${new Date().toLocaleTimeString()}] ${line.trim()}\n`;
+            }
+          });
       }
       output.scrollTop = output.scrollHeight;
     }
@@ -175,7 +181,7 @@
         const slots = document.getElementById("slotsDisplay");
 
         display.textContent = data.running ? "Status: Running" : "Status: Stopped";
-        slots.textContent = \`Slots: \${data.slotsUsed}/\${data.slotsMax}\`;
+        slots.textContent = `Slots: ${data.slotsUsed}/${data.slotsMax}`;
 
         if(data.running) {
           dot.classList.add("running");
@@ -214,10 +220,10 @@
       for(let i = 1; i <= count; i++){
         const div = document.createElement("div");
         div.className = "bot-card";
-        div.innerHTML = \`<div class="bot-header"><div class="bot-name">\${name}\${i}</div><div class="bot-status">Running</div></div>\`;
+        div.innerHTML = `<div class="bot-header"><div class="bot-name">${name}${i}</div><div class="bot-status">Running</div></div>`;
         container.appendChild(div);
       }
-      document.getElementById("myBotsCount").textContent = \`Running: \${count}/10\`;
+      document.getElementById("myBotsCount").textContent = `Running: ${count}/10`;
     }
 
     function buildPublicBots(){
@@ -226,7 +232,7 @@
       for(let i = 1; i <= 75; i++){
         const div = document.createElement("div");
         div.className = "bot-card";
-        div.innerHTML = \`<div class="bot-header"><div class="bot-name">OGsbot\${i}</div><div class="bot-status">Running</div></div>\`;
+        div.innerHTML = `<div class="bot-header"><div class="bot-name">OGsbot${i}</div><div class="bot-status">Running</div></div>`;
         container.appendChild(div);
       }
     }
@@ -235,7 +241,7 @@
       const container = document.getElementById("publicBotsList");
       const div = document.createElement("div");
       div.className = "bot-card";
-      div.innerHTML = \`<div class="bot-header"><div class="bot-name">Public Bot</div><div class="bot-status">Running</div></div><p>ID: 67c2fd571906bd75e5239684</p>\`;
+      div.innerHTML = `<div class="bot-header"><div class="bot-name">Public Bot</div><div class="bot-status">Running</div></div><p>ID: 67c2fd571906bd75e5239684</p>`;
       container.appendChild(div);
     }
 
@@ -247,6 +253,12 @@
         setTimeout(initLogStream, 5000);
       };
     }
+
+    // Expose functions so buttons work
+    window.start = start;
+    window.stop = stop;
+    window.status = status;
+    window.requestPublicBot = requestPublicBot;
 
     // Init
     updateStatus();
