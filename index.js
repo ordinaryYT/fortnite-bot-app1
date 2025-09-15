@@ -10,7 +10,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Serve HTML file
+// Serve HTML
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
@@ -19,6 +19,76 @@ let worker = null;
 let categories = [];
 const MAX_SLOTS = 10;
 let logListeners = [];
+
+// ---- Log capture & filtering ----
+function timestamp() {
+  return new Date().toISOString().split("T")[1].split(".")[0];
+}
+
+function broadcastLog(rawMessage) {
+  if (!rawMessage && rawMessage !== 0) return;
+  const lines = String(rawMessage).split(/\r?\n/);
+
+  for (let line of lines) {
+    if (!line.trim()) continue;
+
+    // strip ANSI escape codes
+    let clean = line.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "").trim();
+
+    // 🔥 remove ALL mentions of "fnlb"
+    clean = clean.replace(/fnlb/gi, "");
+
+    // filter out junk lines
+    if (/playlist_|Checking for updates|up to date|Finished loading/i.test(clean)) {
+      continue;
+    }
+
+    // friendly replacements
+    clean = clean.replace(/Cluster:/gi, "User:");
+    clean = clean.replace(/Categories: (\d+)/gi, "Server Space Usage: $1/10");
+    clean = clean.replace(/Bots per Shard:/gi, "Server Capacity:");
+
+    if (!clean.trim()) continue; // skip empty lines after cleaning
+
+    const out = `[${timestamp()}] ${clean}`;
+    logListeners.forEach(res => {
+      try { res.write(`data: ${out}\n\n`); } catch {}
+    });
+  }
+}
+
+// Console wrappers
+const original = {
+  log: console.log,
+  info: console.info,
+  warn: console.warn,
+  error: console.error,
+};
+const originalWrite = process.stdout.write.bind(process.stdout);
+
+function wrapConsole(method) {
+  return (...args) => {
+    const msg = args.map(a => {
+      if (a instanceof Error) return a.stack || String(a);
+      if (a && typeof a === "object") {
+        try { return JSON.stringify(a); } catch { return String(a); }
+      }
+      return String(a);
+    }).join(" ");
+    original[method](...args);
+    broadcastLog(msg);
+  };
+}
+
+console.log = wrapConsole("log");
+console.info = wrapConsole("info");
+console.warn = wrapConsole("warn");
+console.error = wrapConsole("error");
+
+process.stdout.write = (chunk, encoding, callback) => {
+  try { originalWrite(chunk, encoding, callback); } catch {}
+  broadcastLog(chunk);
+};
 
 // ---- Worker management ----
 async function startWorker(token) {
@@ -115,7 +185,7 @@ app.get("/logs", (req, res) => {
 
   logListeners.push(res);
   req.on("close", () => {
-    logListeners = logListeners.filter((r) => r !== res);
+    logListeners = logListeners.filter(r => r !== res);
   });
 });
 
