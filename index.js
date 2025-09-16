@@ -35,14 +35,14 @@ function broadcastLog(rawMessage) {
     // strip ANSI escape codes
     let clean = line.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "").trim();
 
-    // 🔥 remove ALL mentions of "fnlb"
+    // 🔥 remove all mentions of "fnlb"
     clean = clean.replace(/fnlb/gi, "");
 
-    // 🕒 remove duplicate timestamps inside the message (like [10:45:24])
+    // 🕒 remove duplicate timestamps inside logs
     clean = clean.replace(/\[\d{2}:\d{2}:\d{2}\]/g, "").trim();
 
-    // --- Skip noisy logs you listed ---
-    if (/\[Gateway]/i.test(clean) && /Connecting/i.test(clean)) continue;
+    // --- Skip unwanted junk ---
+    if (/\[Gateway].*Connecting/i.test(clean)) continue;
     if (/ua:\s/i.test(clean)) continue;
     if (/pb:\s/i.test(clean)) continue;
     if (/hotfix/i.test(clean)) continue;
@@ -50,11 +50,14 @@ function broadcastLog(rawMessage) {
     if (/netCL:/i.test(clean)) continue;
     if (/playlistRevisions/i.test(clean)) continue;
 
-    // --- Replace lines you requested ---
-    clean = clean.replace(/Starting shard with ID:.*/i, "Starting OGbot");
-    clean = clean.replace(/categories:\s*/i, "User ID: ");
+    // --- Friendly replacements ---
+    clean = clean.replace(
+      /Starting shard with ID:\s*(.+)/i,
+      "Starting OGbot with ID: $1"
+    );
+    clean = clean.replace(/categories:\s*/gi, "User ID: ");
 
-    if (!clean.trim()) continue; // skip if empty after cleaning
+    if (!clean.trim()) continue;
 
     const out = `[${timestamp()}] ${clean}`;
     logListeners.forEach(res => {
