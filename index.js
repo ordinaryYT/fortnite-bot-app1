@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
+import Discord from 'discord.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,6 +15,64 @@ let logListeners = [];
 let categories = [];
 let worker = null;
 const MAX_SLOTS = 10;
+
+// Discord bot setup
+const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
+const DISCORD_CHANNEL_ID = process.env.DISCORD_CHANNEL_ID;
+let inboxMessages = [];
+
+const client = new Discord.Client({
+  intents: [
+    Discord.GatewayIntentBits.Guilds,
+    Discord.GatewayIntentBits.GuildMessages,
+    Discord.GatewayIntentBits.MessageContent,
+  ],
+});
+
+client.once('ready', () => {
+  console.log(`Discord bot logged in as ${client.user.tag}`);
+});
+
+client.on('messageCreate', async (message) => {
+  if (message.author.bot) return;
+  if (message.channel.id !== DISCORD_CHANNEL_ID) return;
+
+  const content = message.content.toLowerCase();
+
+  // Handle user ID approval
+  if (content.startsWith('approve ')) {
+    const parts = message.content.split(' ');
+    if (parts.length >= 2) {
+      const userID = parts[1];
+      inboxMessages.push({
+        type: 'user_id',
+        message: `Your user ID has been approved: ${userID}`,
+        date: new Date().toLocaleString(),
+      });
+      message.reply(`User ID ${userID} approved and added to inbox.`);
+    }
+  }
+
+  // Handle bot approval
+  if (content.startsWith('approve bot ')) {
+    const parts = message.content.split(' ');
+    if (parts.length >= 3) {
+      const botName = parts[2];
+      inboxMessages.push({
+        type: 'bot',
+        message: `Your bot ${botName} has been approved.`,
+        date: new Date().toLocaleString(),
+      });
+      message.reply(`Bot ${botName} approved and added to inbox.`);
+    }
+  }
+});
+
+if (DISCORD_TOKEN) {
+  client.login(DISCORD_TOKEN);
+} else {
+  console.log('DISCORD_TOKEN not set, skipping bot login');
+}
 
 // ---- Timestamp helper ----
 function timestamp() {
@@ -163,6 +222,39 @@ app.get("/status", (req, res) => {
     slotsUsed: categories.length,
     slotsMax: MAX_SLOTS,
   });
+});
+
+// New routes for Discord integration
+app.get("/inbox", (req, res) => {
+  res.json(inboxMessages);
+});
+
+app.post("/request-user-id", (req, res) => {
+  const channel = client.channels.cache.get(DISCORD_CHANNEL_ID);
+  if (channel) {
+    channel.send('User requested a user ID.');
+    res.json({ success: true, message: 'User ID request sent. It may take up to 24 hours to receive your ID.' });
+  } else {
+    res.status(500).json({ error: 'Discord channel not found.' });
+  }
+});
+
+app.post("/create-bot", (req, res) => {
+  const { fortniteName, autoAcceptInvites, autoAcceptFriends, startSkin, joinEmote, accountLevel } = req.body;
+  const channel = client.channels.cache.get(DISCORD_CHANNEL_ID);
+  if (channel) {
+    const message = `User requested bot creation:
+Fortnite Name: ${fortniteName}
+Auto Accept Invites: ${autoAcceptInvites}
+Auto Accept Friends: ${autoAcceptFriends}
+Start Skin: ${startSkin}
+Join Emote: ${joinEmote}
+Account Level: ${accountLevel}`;
+    channel.send(message);
+    res.json({ success: true, message: 'Bot creation request sent. It may take up to 24 hours to be approved.' });
+  } else {
+    res.status(500).json({ error: 'Discord channel not found.' });
+  }
 });
 
 // ---- Start server ----
