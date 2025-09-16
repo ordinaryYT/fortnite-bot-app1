@@ -32,7 +32,7 @@
     .card { background: var(--card-bg); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
     .input-group { margin-bottom: 1.2rem; }
     .input-group label { display: block; margin-bottom: 0.5rem; color: var(--text-secondary); }
-    .input-group input { width: 100%; padding: 0.8rem 1rem; border-radius: 8px; border: 1px solid var(--border-color); background: var(--secondary-bg); color: var(--text-primary); }
+    .input-group input, .input-group select { width: 100%; padding: 0.8rem 1rem; border-radius: 8px; border: 1px solid var(--border-color); background: var(--secondary-bg); color: var(--text-primary); }
     .status-indicator { display: flex; align-items: center; gap: 0.5rem; margin: 1rem 0; padding: 0.8rem; border-radius: 8px; background: var(--secondary-bg); }
     .status-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent-red); }
     .status-dot.running { background: var(--accent-green); }
@@ -53,6 +53,10 @@
     .category-list { margin-top: 1rem; }
     .category-item { padding: 0.5rem; background: var(--secondary-bg); margin-bottom: 0.5rem; border-radius: 6px; display: flex; justify-content: space-between; }
     .slots-indicator { margin: 1rem 0; font-weight: 600; }
+    .inbox-message { padding: 1rem; background: var(--secondary-bg); margin-bottom: 0.5rem; border-radius: 8px; }
+    .modal { position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; }
+    .modal-content { background: var(--card-bg); padding: 2rem; border-radius: 12px; width: 80%; max-width: 500px; }
+    .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -68,6 +72,7 @@
       <div class="nav-item active" onclick="showView('dashboard')"><i class="fas fa-home"></i><span>Dashboard</span></div>
       <div class="nav-item" onclick="showView('mybots')"><i class="fas fa-server"></i><span>My Bots</span></div>
       <div class="nav-item" onclick="showView('public')"><i class="fas fa-globe"></i><span>Public Bots</span></div>
+      <div class="nav-item" onclick="showView('inbox')"><i class="fas fa-inbox"></i><span>Inbox</span></div>
     </nav>
 
     <main class="content">
@@ -92,6 +97,7 @@
           <div class="btn-group">
             <button class="btn btn-primary" onclick="start()"><i class="fas fa-play"></i> Start</button>
             <button class="btn btn-danger" onclick="stop()"><i class="fas fa-stop"></i> Stop</button>
+            <button class="btn btn-info" onclick="requestUserId()"><i class="fas fa-id-card"></i> Request User ID</button>
             <button class="btn btn-info" id="clearBtn"><i class="fas fa-trash"></i> Clear Logs</button>
           </div>
         </div>
@@ -105,6 +111,7 @@
 
       <section id="mybots-view" class="hidden">
         <h1 class="section-title"><i class="fas fa-server"></i> My Bots <span id="myBotsCount"></span></h1>
+        <button class="btn btn-primary" onclick="openCreateBotModal()"><i class="fas fa-plus"></i> Create Bot</button>
         <div class="bot-grid" id="myBotsList"></div>
       </section>
 
@@ -113,7 +120,55 @@
         <button class="btn btn-info" onclick="requestPublicBot()">Request Public Bot</button>
         <div class="bot-grid" id="publicBotsList"></div>
       </section>
+
+      <section id="inbox-view" class="hidden">
+        <h1 class="section-title"><i class="fas fa-inbox"></i> Inbox</h1>
+        <div class="card">
+          <div id="inbox-messages"></div>
+        </div>
+      </section>
     </main>
+  </div>
+
+  <!-- Create Bot Modal -->
+  <div id="createBotModal" class="modal hidden">
+    <div class="modal-content">
+      <span class="close" onclick="closeCreateBotModal()">&times;</span>
+      <h2>Create Bot</h2>
+      <form id="createBotForm">
+        <div class="input-group">
+          <label for="fortniteName">Fortnite Name</label>
+          <input type="text" id="fortniteName" required>
+        </div>
+        <div class="input-group">
+          <label for="autoAcceptInvites">Auto Accept Invites</label>
+          <select id="autoAcceptInvites" required>
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+          </select>
+        </div>
+        <div class="input-group">
+          <label for="autoAcceptFriends">Auto Accept Friend Requests</label>
+          <select id="autoAcceptFriends" required>
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+          </select>
+        </div>
+        <div class="input-group">
+          <label for="startSkin">Start Skin</label>
+          <input type="text" id="startSkin">
+        </div>
+        <div class="input-group">
+          <label for="joinEmote">Join Emote</label>
+          <input type="text" id="joinEmote">
+        </div>
+        <div class="input-group">
+          <label for="accountLevel">Account Level</label>
+          <input type="number" id="accountLevel">
+        </div>
+        <button type="submit" class="btn btn-primary">Submit</button>
+      </form>
+    </div>
   </div>
 
   <script>
@@ -190,12 +245,6 @@
       appendLog(JSON.stringify(await res.json()));
       updateStatus();
     }
-    async function status() {
-      const res = await fetch("/status");
-      appendLog(JSON.stringify(await res.json()));
-      updateStatus();
-    }
-
     async function updateStatus() {
       const res = await fetch("/status");
       const data = await res.json();
@@ -252,14 +301,66 @@
       container.appendChild(div);
     }
 
+    // === Discord functions ===
+    async function requestUserId() {
+      const res = await fetch('/request-user-id', { method: 'POST' });
+      const data = await res.json();
+      appendLog(JSON.stringify(data));
+    }
+
+    function openCreateBotModal() {
+      document.getElementById('createBotModal').classList.remove('hidden');
+    }
+
+    function closeCreateBotModal() {
+      document.getElementById('createBotModal').classList.add('hidden');
+    }
+
+    document.getElementById('createBotForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fortniteName = document.getElementById('fortniteName').value;
+      const autoAcceptInvites = document.getElementById('autoAcceptInvites').value;
+      const autoAcceptFriends = document.getElementById('autoAcceptFriends').value;
+      const startSkin = document.getElementById('startSkin').value;
+      const joinEmote = document.getElementById('joinEmote').value;
+      const accountLevel = document.getElementById('accountLevel').value;
+
+      const res = await fetch('/create-bot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fortniteName, autoAcceptInvites, autoAcceptFriends, startSkin, joinEmote, accountLevel })
+      });
+      const data = await res.json();
+      appendLog(JSON.stringify(data));
+      closeCreateBotModal();
+    });
+
+    async function loadInbox() {
+      const res = await fetch('/inbox');
+      const messages = await res.json();
+      const container = document.getElementById('inbox-messages');
+      container.innerHTML = '';
+      if (messages.length === 0) {
+        container.innerHTML = '<div class="inbox-message">No messages</div>';
+      } else {
+        messages.forEach(msg => {
+          const div = document.createElement('div');
+          div.className = 'inbox-message';
+          div.textContent = `${msg.date} - ${msg.message}`;
+          container.appendChild(div);
+        });
+      }
+    }
+
     // === View switching ===
     function showView(view) {
       document.querySelectorAll("main section").forEach(s => s.classList.add("hidden"));
       document.getElementById(view+"-view").classList.remove("hidden");
       document.querySelectorAll(".nav-item").forEach(i=>i.classList.remove("active"));
       document.querySelector(`.nav-item[onclick="showView('${view}')"]`).classList.add("active");
-      if(view === "mybots") updateStatus();
-      if(view === "public") buildPublicBots();
+      if (view === 'mybots') updateStatus();
+      if (view === 'public') buildPublicBots();
+      if (view === 'inbox') loadInbox();
     }
 
     // === Init ===
