@@ -42,8 +42,8 @@
     .btn-danger { background: var(--accent-red); color: white; }
     .btn-info { background: var(--accent-blue); color: white; }
     .log-container { background: var(--secondary-bg); border-radius: 12px; overflow: hidden; }
-    .log-header { padding: 1rem 1.5rem; background: rgba(0,0,0,0.2); display:flex; justify-content:space-between; align-items:center; }
-    .log-content { padding: 1rem; height: 300px; overflow-y: auto; font-family: 'Consolas', monospace; font-size: 0.9rem; white-space: pre-line; }
+    .log-header { padding: 1rem 1.5rem; background: rgba(0,0,0,0.2); display:flex; justify-content: space-between; align-items:center; }
+    .log-content { padding: 1rem; height: 300px; overflow-y: auto; font-family: 'Consolas', monospace; font-size: 0.9rem; }
     .bot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.5rem; }
     .bot-card { background: var(--card-bg); border-radius: 12px; overflow: hidden; }
     .bot-header { padding: 1rem; background: rgba(110, 64, 201, 0.2); display: flex; justify-content: space-between; align-items: center; }
@@ -57,28 +57,31 @@
 </head>
 <body>
   <header class="header">
-    <div class="logo"><i class="fas fa-robot"></i><span>OGbots</span></div>
+    <div class="logo">
+      <i class="fas fa-robot"></i>
+      <span>OGbots</span>
+    </div>
   </header>
 
   <div class="main-container">
     <nav class="sidebar">
-      <div class="nav-item active" onclick="showView('dashboard')"><i class="fas fa-home"></i> Dashboard</div>
-      <div class="nav-item" onclick="showView('mybots')"><i class="fas fa-server"></i> My Bots</div>
-      <div class="nav-item" onclick="showView('public')"><i class="fas fa-globe"></i> Public Bots</div>
+      <div class="nav-item active" onclick="showView('dashboard')"><i class="fas fa-home"></i><span>Dashboard</span></div>
+      <div class="nav-item" onclick="showView('mybots')"><i class="fas fa-server"></i><span>My Bots</span></div>
+      <div class="nav-item" onclick="showView('public')"><i class="fas fa-globe"></i><span>Public Bots</span></div>
     </nav>
 
     <main class="content">
       <section id="dashboard-view">
         <h1 class="section-title"><i class="fas fa-tachometer-alt"></i> Dashboard</h1>
         <div class="card">
-          <h2>Bot Control</h2>
+          <h2 class="card-title">Bot Control</h2>
           <div class="input-group">
-            <label>Name</label>
-            <input id="username" placeholder="Enter your name">
+            <label for="name">Name</label>
+            <input type="text" id="name" placeholder="Enter your name">
           </div>
           <div class="input-group">
-            <label>User ID</label>
-            <input id="userId" placeholder="Enter your user ID">
+            <label for="userId">User ID</label>
+            <input type="text" id="userId" placeholder="Enter user ID">
           </div>
           <div class="status-indicator">
             <div class="status-dot" id="statusDot"></div>
@@ -89,11 +92,13 @@
           <div class="btn-group">
             <button class="btn btn-primary" onclick="start()"><i class="fas fa-play"></i> Start</button>
             <button class="btn btn-danger" onclick="stop()"><i class="fas fa-stop"></i> Stop</button>
-            <button class="btn btn-info" onclick="clearLogs()"><i class="fas fa-broom"></i> Clear Logs</button>
+            <button class="btn btn-info" id="clearBtn"><i class="fas fa-trash"></i> Clear Logs</button>
           </div>
         </div>
         <div class="log-container">
-          <div class="log-header">Live Logs</div>
+          <div class="log-header">
+            <span>Live Logs</span>
+          </div>
           <div class="log-content" id="output"></div>
         </div>
       </section>
@@ -112,89 +117,117 @@
   </div>
 
   <script>
-    let savedLogs = [];
+    // === Persisted values ===
+    const nameInput = document.getElementById("name");
+    const userIdInput = document.getElementById("userId");
+    const output = document.getElementById("output");
+    const clearBtn = document.getElementById("clearBtn");
 
-    function showView(view) {
-      document.querySelectorAll("main section").forEach(s => s.classList.add("hidden"));
-      document.getElementById(view+"-view").classList.remove("hidden");
-      document.querySelectorAll(".nav-item").forEach(i=>i.classList.remove("active"));
-      document.querySelector(`.nav-item[onclick="showView('${view}')"]`).classList.add("active");
-      if(view === "mybots") updateStatus();
-      if(view === "public") buildPublicBots();
-    }
+    nameInput.value = localStorage.getItem("name") || "";
+    userIdInput.value = localStorage.getItem("userId") || "";
+    output.innerHTML = localStorage.getItem("logs") || "";
 
-    function appendLog(data) {
-      const output = document.getElementById("output");
-      String(data).split(/\r?\n/).forEach(line => {
-        if (line.trim()) {
-          savedLogs.push(line.trim());
-          output.textContent += line.trim() + "\n";
-        }
-      });
-      output.scrollTop = output.scrollHeight;
-      localStorage.setItem("logs", JSON.stringify(savedLogs));
-    }
-
-    function clearLogs(){
-      savedLogs = [];
-      document.getElementById("output").textContent = "";
+    nameInput.addEventListener("input", () => {
+      localStorage.setItem("name", nameInput.value);
+      applyReplacements();
+    });
+    userIdInput.addEventListener("input", () => {
+      localStorage.setItem("userId", userIdInput.value);
+      applyReplacements();
+    });
+    clearBtn.addEventListener("click", () => {
+      output.innerHTML = "";
       localStorage.removeItem("logs");
+    });
+
+    // === Log handling ===
+    function appendLog(data) {
+      let line = data;
+
+      if (nameInput.value) line = line.replace(/ogprivatebot/gi, nameInput.value);
+      if (userIdInput.value) line = line.replace(/User ID:\s*[a-z0-9]+/gi, "User ID: " + userIdInput.value);
+
+      const div = document.createElement("div");
+      div.textContent = line;
+      output.appendChild(div);
+      output.scrollTop = output.scrollHeight;
+
+      localStorage.setItem("logs", output.innerHTML);
     }
 
+    function applyReplacements() {
+      const name = nameInput.value;
+      const userId = userIdInput.value;
+      output.querySelectorAll("div").forEach(div => {
+        let line = div.textContent;
+        if (name) line = line.replace(/ogprivatebot/gi, name);
+        if (userId) line = line.replace(/User ID:\s*[a-z0-9]+/gi, "User ID: " + userId);
+        div.textContent = line;
+      });
+      localStorage.setItem("logs", output.innerHTML);
+    }
+
+    function initLogStream(){
+      const source = new EventSource("/logs");
+      source.onmessage = (event) => appendLog(event.data);
+      source.onerror = () => setTimeout(initLogStream, 5000);
+    }
+
+    // === Backend control ===
     async function start() {
-      const userId = document.getElementById("userId").value;
+      const userId = userIdInput.value;
+      if (!userId){ alert("Enter a User ID"); return; }
       const res = await fetch("/start", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({ category: userId })
+        body: JSON.stringify({category: userId})
       });
-      const data = await res.json();
-      appendLog(JSON.stringify(data));
+      appendLog(JSON.stringify(await res.json()));
       updateStatus();
     }
-
     async function stop() {
       const res = await fetch("/stop", {method: "POST"});
-      const data = await res.json();
-      appendLog(JSON.stringify(data));
+      appendLog(JSON.stringify(await res.json()));
+      updateStatus();
+    }
+    async function status() {
+      const res = await fetch("/status");
+      appendLog(JSON.stringify(await res.json()));
       updateStatus();
     }
 
     async function updateStatus() {
-      try {
-        const res = await fetch("/status");
-        const data = await res.json();
-        document.getElementById("statusDisplay").textContent = data.running ? "Status: Running" : "Status: Stopped";
-        document.getElementById("slotsDisplay").textContent = `Slots: ${data.slotsUsed}/${data.slotsMax}`;
-        const dot = document.getElementById("statusDot");
-        if(data.running) dot.classList.add("running"); else dot.classList.remove("running");
-
-        const categoryList = document.getElementById("categoryList");
-        categoryList.innerHTML = "";
-        if (data.categories && data.categories.length > 0) {
-          const title = document.createElement("div");
-          title.textContent = "Active User IDs:";
-          title.style.fontWeight = "bold";
-          categoryList.appendChild(title);
-          data.categories.forEach(cat => {
-            const item = document.createElement("div");
-            item.className = "category-item";
-            item.textContent = cat;
-            categoryList.appendChild(item);
-          });
-        }
-        renderMyBots(data.slotsUsed);
-      } catch {}
+      const res = await fetch("/status");
+      const data = await res.json();
+      document.getElementById("statusDisplay").textContent = data.running ? "Status: Running" : "Status: Stopped";
+      document.getElementById("statusDot").classList.toggle("running", data.running);
+      document.getElementById("slotsDisplay").textContent = `Slots: ${data.slotsUsed}/${data.slotsMax}`;
+      const categoryList = document.getElementById("categoryList");
+      categoryList.innerHTML = "";
+      if (data["user id"] && data["user id"].length > 0) {
+        const title = document.createElement("div");
+        title.textContent = "Active User IDs:";
+        title.style.marginBottom = "0.5rem";
+        title.style.fontWeight = "bold";
+        categoryList.appendChild(title);
+        data["user id"].forEach(uid => {
+          const item = document.createElement("div");
+          item.className = "category-item";
+          item.textContent = uid;
+          categoryList.appendChild(item);
+        });
+      }
+      renderMyBots(data.slotsUsed);
     }
 
     function renderMyBots(count){
       const container = document.getElementById("myBotsList");
       container.innerHTML = "";
-      const name = document.getElementById("username").value || "OGprivatebot";
+      const botName = nameInput.value || "OGprivatebot";
       for(let i = 1; i <= count; i++){
         const div = document.createElement("div");
         div.className = "bot-card";
-        div.innerHTML = `<div class="bot-header"><div class="bot-name">${name}${i}</div><div class="bot-status">Running</div></div>`;
+        div.innerHTML = `<div class="bot-header"><div class="bot-name">${botName}${i}</div><div class="bot-status">Running</div></div>`;
         container.appendChild(div);
       }
       document.getElementById("myBotsCount").textContent = `Running: ${count}/10`;
@@ -215,31 +248,25 @@
       const container = document.getElementById("publicBotsList");
       const div = document.createElement("div");
       div.className = "bot-card";
-      div.innerHTML = `<div class="bot-header"><div class="bot-name">Public Bot</div><div class="bot-status">Running</div></div>`;
+      div.innerHTML = `<div class="bot-header"><div class="bot-name">Public Bot</div><div class="bot-status">Running</div></div><p>ID: 67c2fd571906bd75e5239684</p>`;
       container.appendChild(div);
     }
 
-    function initLogStream(){
-      const source = new EventSource("/logs");
-      source.onmessage = (event) => appendLog(event.data);
-      source.onerror = () => {
-        source.close();
-        setTimeout(initLogStream, 5000);
-      };
+    // === View switching ===
+    function showView(view) {
+      document.querySelectorAll("main section").forEach(s => s.classList.add("hidden"));
+      document.getElementById(view+"-view").classList.remove("hidden");
+      document.querySelectorAll(".nav-item").forEach(i=>i.classList.remove("active"));
+      document.querySelector(`.nav-item[onclick="showView('${view}')"]`).classList.add("active");
+      if(view === "mybots") updateStatus();
+      if(view === "public") buildPublicBots();
     }
 
-    // Restore logs on load
-    window.addEventListener("load", () => {
-      const stored = JSON.parse(localStorage.getItem("logs") || "[]");
-      savedLogs = stored;
-      document.getElementById("output").textContent = stored.join("\n") + (stored.length ? "\n" : "");
-      updateStatus();
-      initLogStream();
-    });
-
-    window.start = start;
-    window.stop = stop;
-    window.clearLogs = clearLogs;
+    // === Init ===
+    updateStatus();
+    setInterval(updateStatus, 5000);
+    initLogStream();
+    applyReplacements();
   </script>
 </body>
 </html>
