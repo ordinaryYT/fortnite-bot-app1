@@ -13,6 +13,7 @@ app.use(express.json());
 let logListeners = [];
 const MAX_SLOTS = 10;
 let categories = [];
+let running = false;
 
 // ---- Timestamp helper ----
 function timestamp() {
@@ -29,13 +30,9 @@ function broadcastLog(rawMessage) {
 
     let clean = line.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "").trim();
 
-    // Remove all fnlb mentions
     clean = clean.replace(/fnlb/gi, "");
-
-    // Remove duplicate timestamps inside logs
     clean = clean.replace(/\[\d{2}:\d{2}:\d{2}\]/g, "").trim();
 
-    // Skip unwanted junk
     if (/playlist_/i.test(clean)) continue;
     if (/ua:/i.test(clean)) continue;
     if (/pb:/i.test(clean)) continue;
@@ -43,18 +40,18 @@ function broadcastLog(rawMessage) {
     if (/netCL/i.test(clean)) continue;
     if (/Connecting \(http/i.test(clean)) continue;
 
-    // Replace "Starting shard" → "Starting OGbot with ID: …"
     clean = clean.replace(
       /Starting shard with ID:\s*(.+)/i,
       "Starting OGbot with ID: $1"
     );
-
-    // Replace "categories:" → "User ID:"
     clean = clean.replace(/categories:\s*/gi, "User ID: ");
 
-    // Strip [Gateway] [Client] etc, keep only message
-    clean = clean.replace(/^\[[^\]]+\]\s*/g, "").trim();
+    if (/Cluster:.*User ID:/i.test(clean)) {
+      const slotsUsed = categories.length;
+      clean = `user id: ${slotsUsed}. server slots used: ${slotsUsed}/${MAX_SLOTS}`;
+    }
 
+    clean = clean.replace(/^\[[^\]]+\]\s*/g, "").trim();
     if (!clean.trim()) continue;
 
     const out = `[${timestamp()}] ${clean}`;
@@ -64,7 +61,7 @@ function broadcastLog(rawMessage) {
   }
 }
 
-// ---- Wrap console + stdout (original style) ----
+// ---- Wrap console + stdout ----
 const originalLog = console.log;
 console.log = (...args) => {
   const msg = args.map(a => (typeof a === "object" ? JSON.stringify(a) : String(a))).join(" ");
@@ -94,6 +91,42 @@ app.get("/logs", (req, res) => {
   });
 });
 
-// ---- Start ----
+// ---- New Start/Stop routes ----
+app.post("/start", (req, res) => {
+  const { category } = req.body;
+  if (!category) {
+    console.log({ error: "user id required" });
+    return res.status(400).json({ error: "user id required" });
+  }
+
+  if (categories.length >= MAX_SLOTS) {
+    console.log({ error: "❌ Server full" });
+    return res.status(400).json({ error: "❌ Server full" });
+  }
+
+  if (!categories.includes(category)) categories.push(category);
+  running = true;
+
+  console.log(`Starting OGbot with ID: ${category}`);
+  res.json({ success: true, "user id": categories });
+});
+
+app.post("/stop", (req, res) => {
+  running = false;
+  categories = [];
+  console.log("Worker stopped");
+  res.json({ success: true, message: "Worker stopped" });
+});
+
+app.get("/status", (req, res) => {
+  res.json({
+    running,
+    "user id": categories,
+    slotsUsed: categories.length,
+    slotsMax: MAX_SLOTS,
+  });
+});
+
+// ---- Start server ----
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
