@@ -39,7 +39,6 @@ client.on('messageCreate', async (message) => {
 
   const content = message.content.toLowerCase();
 
-  // Handle user ID approval
   if (content.startsWith('approve ')) {
     const parts = message.content.split(' ');
     if (parts.length >= 2) {
@@ -53,7 +52,6 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  // Handle bot approval
   if (content.startsWith('approve bot ')) {
     const parts = message.content.split(' ');
     if (parts.length >= 3) {
@@ -79,14 +77,15 @@ function timestamp() {
   return new Date().toISOString().split("T")[1].split(".")[0];
 }
 
-// ---- Core log system (old filters) ----
-function broadcastLog(rawMessage) {
+// ---- Send logs to frontend (with cleaning & replacements) ----
+function sendToFrontendLogs(rawMessage) {
   if (!rawMessage && rawMessage !== 0) return;
   const lines = String(rawMessage).split(/\r?\n/);
 
   for (let line of lines) {
     if (!line.trim()) continue;
 
+    // Clean version for frontend
     let clean = line.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "").trim();
     clean = clean.replace(/fnlb/gi, "");
     clean = clean.replace(/\[\d{2}:\d{2}:\d{2}\]/g, "").trim();
@@ -118,18 +117,17 @@ function broadcastLog(rawMessage) {
   }
 }
 
-// ---- Console + stdout hooks ----
+// ---- Hook console.log for frontend only ----
 const originalLog = console.log;
 console.log = (...args) => {
   const msg = args.map(a => (typeof a === "object" ? JSON.stringify(a) : String(a))).join(" ");
+  // Send cleaned version to frontend
+  sendToFrontendLogs(msg);
+  // Send raw version to Render logs
   originalLog(...args);
-  broadcastLog(msg);
 };
-const originalWrite = process.stdout.write.bind(process.stdout);
-process.stdout.write = (chunk, encoding, callback) => {
-  try { originalWrite(chunk, encoding, callback); } catch {}
-  broadcastLog(chunk);
-};
+
+// 🚫 Do not patch process.stdout.write → keeps Render logs raw
 
 // ---- fnlb worker logic ----
 async function startWorker(token) {
