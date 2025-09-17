@@ -179,11 +179,7 @@
     <div class="modal-content">
       <span class="close" onclick="closePublicBotModal()">&times;</span>
       <h2 class="modal-title">Public Bot Request</h2>
-      <div class="modal-message">
-        <p>Thank you for your interest in our public bots!</p>
-        <p>Your request has been sent to our team.</p>
-        <p>We'll review your request and get back to you soon.</p>
-      </div>
+      <div class="modal-message"></div>
       <div style="text-align: center;">
         <button class="btn btn-primary" onclick="closePublicBotModal()">OK</button>
       </div>
@@ -220,56 +216,46 @@
     function openCreateBotModal() {
       createBotModal.style.display = "flex";
     }
-
     function closeCreateBotModal() {
       createBotModal.style.display = "none";
     }
-
     function openPublicBotModal() {
+      const uid = userIdInput.value || "Not set";
+      publicBotModal.querySelector(".modal-message").innerHTML = `
+        <p>Thank you for your interest in our public bots!</p>
+        <p>Your User ID: <strong>${uid}</strong></p>
+        <p>Your request has been sent to our team.</p>
+        <p>We'll review your request and get back to you soon.</p>
+      `;
       publicBotModal.style.display = "flex";
     }
-
     function closePublicBotModal() {
       publicBotModal.style.display = "none";
     }
-
-    // Close modals when clicking outside of them
     window.addEventListener("click", (event) => {
-      if (event.target === createBotModal) {
-        closeCreateBotModal();
-      }
-      if (event.target === publicBotModal) {
-        closePublicBotModal();
-      }
+      if (event.target === createBotModal) closeCreateBotModal();
+      if (event.target === publicBotModal) closePublicBotModal();
     });
 
     // === Log handling ===
     function appendLog(data) {
       let line = data;
-
-      if (nameInput.value) line = line.replace(/ogprivatebot/gi, nameInput.value);
-      if (userIdInput.value) line = line.replace(/User ID:\s*[a-z0-9]+/gi, "User ID: " + userIdInput.value);
-
+      if (nameInput.value) line = line.replace(/User ID:\s*[a-z0-9]+/gi, "User: " + nameInput.value);
       const div = document.createElement("div");
       div.textContent = line;
       output.appendChild(div);
       output.scrollTop = output.scrollHeight;
-
       localStorage.setItem("logs", output.innerHTML);
     }
-
     function applyReplacements() {
       const name = nameInput.value;
-      const userId = userIdInput.value;
       output.querySelectorAll("div").forEach(div => {
         let line = div.textContent;
-        if (name) line = line.replace(/ogprivatebot/gi, name);
-        if (userId) line = line.replace(/User ID:\s*[a-z0-9]+/gi, "User ID: " + userId);
+        if (name) line = line.replace(/User ID:\s*[a-z0-9]+/gi, "User: " + name);
         div.textContent = line;
       });
       localStorage.setItem("logs", output.innerHTML);
     }
-
     function initLogStream(){
       const source = new EventSource("/logs");
       source.onmessage = (event) => appendLog(event.data);
@@ -340,9 +326,6 @@
           <div class="bot-header">
             <div class="bot-name">OGsbot${i}</div>
             <div class="bot-status">Running</div>
-          </div>
-          <div style="padding: 1rem;">
-            <p>User ID: 67c2fd571906bd75e5239684</p>
           </div>
         `;
         container.appendChild(div);
