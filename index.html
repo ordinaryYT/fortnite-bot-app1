@@ -54,9 +54,12 @@
     .category-item { padding: 0.5rem; background: var(--secondary-bg); margin-bottom: 0.5rem; border-radius: 6px; display: flex; justify-content: space-between; }
     .slots-indicator { margin: 1rem 0; font-weight: 600; }
     .inbox-message { padding: 1rem; background: var(--secondary-bg); margin-bottom: 0.5rem; border-radius: 8px; }
-    .modal { position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; }
-    .modal-content { background: var(--card-bg); padding: 2rem; border-radius: 12px; width: 80%; max-width: 500px; }
-    .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+    .modal { position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; }
+    .modal-content { background: var(--card-bg); padding: 2rem; border-radius: 12px; width: 80%; max-width: 500px; position: relative; }
+    .close { color: #aaa; position: absolute; top: 10px; right: 15px; font-size: 28px; font-weight: bold; cursor: pointer; }
+    .close:hover { color: white; }
+    .modal-title { margin-bottom: 1rem; text-align: center; }
+    .modal-message { text-align: center; margin-bottom: 1.5rem; }
   </style>
 </head>
 <body>
@@ -117,7 +120,7 @@
 
       <section id="public-view" class="hidden">
         <h1 class="section-title"><i class="fas fa-globe"></i> Public Bots</h1>
-        <button class="btn btn-info" onclick="requestPublicBot()">Request Public Bot</button>
+        <button class="btn btn-info" onclick="openPublicBotModal()">Request Public Bot</button>
         <div class="bot-grid" id="publicBotsList"></div>
       </section>
 
@@ -131,7 +134,7 @@
   </div>
 
   <!-- Create Bot Modal -->
-  <div id="createBotModal" class="modal hidden">
+  <div id="createBotModal" class="modal">
     <div class="modal-content">
       <span class="close" onclick="closeCreateBotModal()">&times;</span>
       <h2>Create Bot</h2>
@@ -171,12 +174,30 @@
     </div>
   </div>
 
+  <!-- Public Bot Request Modal -->
+  <div id="publicBotModal" class="modal">
+    <div class="modal-content">
+      <span class="close" onclick="closePublicBotModal()">&times;</span>
+      <h2 class="modal-title">Public Bot Request</h2>
+      <div class="modal-message">
+        <p>Thank you for your interest in our public bots!</p>
+        <p>Your request has been sent to our team.</p>
+        <p>We'll review your request and get back to you soon.</p>
+      </div>
+      <div style="text-align: center;">
+        <button class="btn btn-primary" onclick="closePublicBotModal()">OK</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     // === Persisted values ===
     const nameInput = document.getElementById("name");
     const userIdInput = document.getElementById("userId");
     const output = document.getElementById("output");
     const clearBtn = document.getElementById("clearBtn");
+    const createBotModal = document.getElementById("createBotModal");
+    const publicBotModal = document.getElementById("publicBotModal");
 
     nameInput.value = localStorage.getItem("name") || "";
     userIdInput.value = localStorage.getItem("userId") || "";
@@ -193,6 +214,33 @@
     clearBtn.addEventListener("click", () => {
       output.innerHTML = "";
       localStorage.removeItem("logs");
+    });
+
+    // === Modal functions ===
+    function openCreateBotModal() {
+      createBotModal.style.display = "flex";
+    }
+
+    function closeCreateBotModal() {
+      createBotModal.style.display = "none";
+    }
+
+    function openPublicBotModal() {
+      publicBotModal.style.display = "flex";
+    }
+
+    function closePublicBotModal() {
+      publicBotModal.style.display = "none";
+    }
+
+    // Close modals when clicking outside of them
+    window.addEventListener("click", (event) => {
+      if (event.target === createBotModal) {
+        closeCreateBotModal();
+      }
+      if (event.target === publicBotModal) {
+        closePublicBotModal();
+      }
     });
 
     // === Log handling ===
@@ -288,17 +336,21 @@
       for(let i = 1; i <= 75; i++){
         const div = document.createElement("div");
         div.className = "bot-card";
-        div.innerHTML = `<div class="bot-header"><div class="bot-name">OGsbot${i}</div><div class="bot-status">Running</div></div>`;
+        div.innerHTML = `
+          <div class="bot-header">
+            <div class="bot-name">OGsbot${i}</div>
+            <div class="bot-status">Running</div>
+          </div>
+          <div style="padding: 1rem;">
+            <p>User ID: ${generateRandomId()}</p>
+          </div>
+        `;
         container.appendChild(div);
       }
     }
 
-    function requestPublicBot(){
-      const container = document.getElementById("publicBotsList");
-      const div = document.createElement("div");
-      div.className = "bot-card";
-      div.innerHTML = `<div class="bot-header"><div class="bot-name">Public Bot</div><div class="bot-status">Running</div></div><p>ID: 67c2fd571906bd75e5239684</p>`;
-      container.appendChild(div);
+    function generateRandomId() {
+      return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
     }
 
     // === Discord functions ===
@@ -306,14 +358,6 @@
       const res = await fetch('/request-user-id', { method: 'POST' });
       const data = await res.json();
       appendLog(JSON.stringify(data));
-    }
-
-    function openCreateBotModal() {
-      document.getElementById('createBotModal').classList.remove('hidden');
-    }
-
-    function closeCreateBotModal() {
-      document.getElementById('createBotModal').classList.add('hidden');
     }
 
     document.getElementById('createBotForm').addEventListener('submit', async (e) => {
