@@ -61,7 +61,7 @@
     .modal-title { margin-bottom: 1rem; text-align: center; }
     .modal-message { text-align: center; margin-bottom: 1.5rem; }
 
-    /* Shutdown overlay */
+    /* 🔥 Shutdown overlay */
     #shutdownOverlay {
       position: fixed;
       z-index: 9999;
@@ -90,7 +90,7 @@
   </style>
 </head>
 <body>
-  <!-- Shutdown overlay -->
+  <!-- 🔥 Shutdown overlay -->
   <div id="shutdownOverlay">
     <h1>⚠️ Website Temporarily Offline</h1>
     <p>Moderators have temporarily turned this website off due to an issue or an update.<br>
@@ -113,16 +113,17 @@
     </nav>
 
     <main class="content">
-      <!-- (dashboard, mybots, public, inbox sections unchanged from your original) -->
-      <!-- ... keep all the content you already had here ... -->
+      <!-- All your sections (dashboard, mybots, public, inbox) remain unchanged -->
+      <!-- ... everything from your original HTML ... -->
     </main>
   </div>
 
-  <!-- Modals unchanged -->
-  <!-- ... (createBotModal, publicBotModal, etc.) ... -->
+  <!-- Modals (unchanged) -->
+  <!-- ... createBotModal, publicBotModal ... -->
 
   <script>
-    // (all your existing JavaScript unchanged, including updateStatus, initLogStream, etc.)
+    // === Your original JavaScript (unchanged) ===
+    // ... all the code handling logs, modals, bots, inbox, etc. ...
 
     // === Init ===
     updateStatus();
@@ -130,7 +131,7 @@
     initLogStream();
     applyReplacements();
 
-    // === Shutdown overlay polling ===
+    // 🔥 Shutdown overlay polling
     async function checkSiteStatus() {
       try {
         const res = await fetch("/site-status");
