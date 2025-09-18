@@ -16,6 +16,14 @@ let categories = [];
 let worker = null;
 const MAX_SLOTS = 10;
 
+// Role IDs (replace with real ones)
+const LOGS_ROLE_ID = "123456789012345678";   // Role that can toggle logs
+const ADMIN_ROLE_ID = "987654321098765432";  // Role that can shutdown/turnon
+
+// Feature toggles
+let logsEnabled = true;
+let siteShutdown = false;
+
 // Discord bot setup
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const DISCORD_CHANNEL_ID = process.env.DISCORD_CHANNEL_ID;
@@ -30,46 +38,90 @@ const client = new Discord.Client({
 });
 
 client.once("ready", () => {
-  console.log(`Discord bot logged in as ${client.user.tag}`);
+  console.log(`✅ Discord bot logged in as ${client.user.tag}`);
+  registerCommands();
 });
 
-client.on("messageCreate", async (message) => {
-  if (message.author.bot) return;
-  if (message.channel.id !== DISCORD_CHANNEL_ID) return;
+// Slash command handling
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
 
-  const content = message.content.toLowerCase();
+  const logToChannel = async (msg) => {
+    const channel = client.channels.cache.get(DISCORD_CHANNEL_ID);
+    if (channel) channel.send(msg);
+  };
 
-  if (content.startsWith("approve ")) {
-    const parts = message.content.split(" ");
-    if (parts.length >= 2) {
-      const userID = parts[1];
-      inboxMessages.push({
-        type: "user_id",
-        message: `Your user ID has been approved: ${userID}`,
-        date: new Date().toLocaleString(),
-      });
-      message.reply(`User ID ${userID} approved and added to inbox.`);
+  // /logs on | off
+  if (interaction.commandName === "logs") {
+    if (!interaction.member.roles.cache.has(LOGS_ROLE_ID)) {
+      return interaction.reply({ content: "❌ You don’t have permission to use this.", ephemeral: true });
     }
+    const action = interaction.options.getString("action");
+    logsEnabled = (action === "on");
+    await interaction.reply(`✅ Logs have been turned **${logsEnabled ? "ON" : "OFF"}**`);
+    await logToChannel(`📝 ${interaction.user.tag} set logs **${logsEnabled ? "ON" : "OFF"}**`);
   }
 
-  if (content.startsWith("approve bot ")) {
-    const parts = message.content.split(" ");
-    if (parts.length >= 3) {
-      const botName = parts[2];
-      inboxMessages.push({
-        type: "bot",
-        message: `Your bot ${botName} has been approved.`,
-        date: new Date().toLocaleString(),
-      });
-      message.reply(`Bot ${botName} approved and added to inbox.`);
+  // /shutdown
+  if (interaction.commandName === "shutdown") {
+    if (!interaction.member.roles.cache.has(ADMIN_ROLE_ID)) {
+      return interaction.reply({ content: "❌ You don’t have permission.", ephemeral: true });
     }
+    siteShutdown = true;
+    await interaction.reply("🛑 The website has been shut down with blackout screen.");
+    await logToChannel(`🚨 ${interaction.user.tag} shut down the website.`);
+  }
+
+  // /turnon
+  if (interaction.commandName === "turnon") {
+    if (!interaction.member.roles.cache.has(ADMIN_ROLE_ID)) {
+      return interaction.reply({ content: "❌ You don’t have permission.", ephemeral: true });
+    }
+    siteShutdown = false;
+    await interaction.reply("✅ The website is back online.");
+    await logToChannel(`✅ ${interaction.user.tag} turned the website back online.`);
   }
 });
+
+// Register slash commands
+async function registerCommands() {
+  if (!DISCORD_TOKEN) return;
+  const rest = new Discord.REST({ version: "10" }).setToken(DISCORD_TOKEN);
+  const commands = [
+    {
+      name: "logs",
+      description: "Turn logs on or off",
+      options: [
+        {
+          type: 3, // STRING
+          name: "action",
+          description: "on or off",
+          required: true,
+          choices: [
+            { name: "on", value: "on" },
+            { name: "off", value: "off" },
+          ],
+        },
+      ],
+    },
+    { name: "shutdown", description: "Shut down the website (blackout screen)" },
+    { name: "turnon", description: "Bring the website back online" },
+  ];
+  try {
+    await rest.put(
+      Discord.Routes.applicationCommands(client.user.id),
+      { body: commands }
+    );
+    console.log("✅ Slash commands registered.");
+  } catch (err) {
+    console.error("❌ Failed to register commands", err);
+  }
+}
 
 if (DISCORD_TOKEN) {
   client.login(DISCORD_TOKEN);
 } else {
-  console.log("DISCORD_TOKEN not set, skipping bot login");
+  console.log("⚠️ DISCORD_TOKEN not set, skipping bot login");
 }
 
 // ---- Timestamp helper ----
@@ -77,44 +129,16 @@ function timestamp() {
   return new Date().toISOString().split("T")[1].split(".")[0];
 }
 
-// ---- Send logs to frontend (with cleaning & replacements) ----
+// ---- Send logs to frontend (sanitized) ----
 function sendToFrontendLogs(rawMessage) {
   if (!rawMessage && rawMessage !== 0) return;
-  const lines = String(rawMessage).split(/\r?\n/);
+  if (!logsEnabled) return;
 
+  const lines = String(rawMessage).split(/\r?\n/);
   for (let line of lines) {
     if (!line.trim()) continue;
-
-    // Clean version for frontend
     let clean = line.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "").trim();
-
-    // sanitize sensitive stuff
-    clean = clean.replace(/fnlb/gi, ""); // hide fnlb
-    clean = clean.replace(/\[\d{2}:\d{2}:\d{2}\]/g, "").trim();
-
-    // filters
-    if (/playlist_/i.test(clean)) continue;
-    if (/ua:/i.test(clean)) continue;
-    if (/pb:/i.test(clean)) continue;
-    if (/hotfix/i.test(clean)) continue;
-    if (/netCL/i.test(clean)) continue;
-    if (/Connecting \(http/i.test(clean)) continue;
-
-    // replacements
-    clean = clean.replace(
-      /Starting shard with ID:\s*(.+)/i,
-      "Starting OGbot with ID: $1"
-    );
-    clean = clean.replace(/categories:\s*/gi, "User ID: ");
-
-    if (/Cluster:.*User ID:/i.test(clean)) {
-      const slotsUsed = categories.length;
-      clean = `user id: ${slotsUsed}. server slots used: ${slotsUsed}/${MAX_SLOTS}`;
-    }
-
-    clean = clean.replace(/^\[[^\]]+\]\s*/g, "").trim();
     if (!clean.trim()) continue;
-
     const out = `[${timestamp()}] ${clean}`;
     logListeners.forEach((res) => {
       try {
@@ -124,45 +148,32 @@ function sendToFrontendLogs(rawMessage) {
   }
 }
 
-// ---- Hook console logs + stdout (frontend sanitized, Render raw) ----
+// ---- Hook console logs ----
 const originalLog = console.log;
 const originalWarn = console.warn;
 const originalError = console.error;
 const originalWrite = process.stdout.write.bind(process.stdout);
 
-// console.log
 console.log = (...args) => {
-  const msg = args
-    .map((a) => (typeof a === "object" ? JSON.stringify(a) : String(a)))
-    .join(" ");
-  sendToFrontendLogs(msg); // sanitized for website
-  originalLog(...args); // raw for Render
+  const msg = args.map((a) => (typeof a === "object" ? JSON.stringify(a) : String(a))).join(" ");
+  sendToFrontendLogs(msg);
+  originalLog(...args);
 };
-
-// console.warn
 console.warn = (...args) => {
-  const msg = args
-    .map((a) => (typeof a === "object" ? JSON.stringify(a) : String(a)))
-    .join(" ");
+  const msg = args.map((a) => (typeof a === "object" ? JSON.stringify(a) : String(a))).join(" ");
   sendToFrontendLogs("[WARN] " + msg);
   originalWarn(...args);
 };
-
-// console.error
 console.error = (...args) => {
-  const msg = args
-    .map((a) => (typeof a === "object" ? JSON.stringify(a) : String(a)))
-    .join(" ");
+  const msg = args.map((a) => (typeof a === "object" ? JSON.stringify(a) : String(a))).join(" ");
   sendToFrontendLogs("[ERROR] " + msg);
   originalError(...args);
 };
-
-// stdout (fnlb + other libs write here)
 process.stdout.write = (chunk, encoding, callback) => {
   try {
-    sendToFrontendLogs(chunk); // sanitized copy to frontend
+    sendToFrontendLogs(chunk);
   } catch {}
-  return originalWrite(chunk, encoding, callback); // raw to Render
+  return originalWrite(chunk, encoding, callback);
 };
 
 // ---- fnlb worker logic ----
@@ -212,7 +223,16 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
 
+// site shutdown state (for overlay)
+app.get("/site-status", (req, res) => {
+  res.json({ shutdown: siteShutdown });
+});
+
+// logs
 app.get("/logs", (req, res) => {
+  if (!logsEnabled) {
+    return res.status(403).end("Logs are currently disabled.");
+  }
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
@@ -263,7 +283,6 @@ app.get("/status", (req, res) => {
   });
 });
 
-// New routes for Discord integration
 app.get("/inbox", (req, res) => {
   res.json(inboxMessages);
 });
@@ -274,8 +293,7 @@ app.post("/request-user-id", (req, res) => {
     channel.send("User requested a user ID.");
     res.json({
       success: true,
-      message:
-        "User ID request sent. It may take up to 24 hours to receive your ID.",
+      message: "User ID request sent. It may take up to 24 hours to receive your ID.",
     });
   } else {
     res.status(500).json({ error: "Discord channel not found." });
@@ -283,14 +301,7 @@ app.post("/request-user-id", (req, res) => {
 });
 
 app.post("/create-bot", (req, res) => {
-  const {
-    fortniteName,
-    autoAcceptInvites,
-    autoAcceptFriends,
-    startSkin,
-    joinEmote,
-    accountLevel,
-  } = req.body;
+  const { fortniteName, autoAcceptInvites, autoAcceptFriends, startSkin, joinEmote, accountLevel } = req.body;
   const channel = client.channels.cache.get(DISCORD_CHANNEL_ID);
   if (channel) {
     const message = `User requested bot creation:
@@ -303,8 +314,7 @@ Account Level: ${accountLevel}`;
     channel.send(message);
     res.json({
       success: true,
-      message:
-        "Bot creation request sent. It may take up to 24 hours to be approved.",
+      message: "Bot creation request sent. It may take up to 24 hours to be approved.",
     });
   } else {
     res.status(500).json({ error: "Discord channel not found." });
