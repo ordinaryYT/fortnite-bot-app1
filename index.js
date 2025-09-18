@@ -105,12 +105,10 @@ client.on("interactionCreate", async (interaction) => {
       const action = interaction.options.getString("action");
       logsEnabled = action === "on";
       await interaction.reply(
-        `Logs have been turned **${logsEnabled ? "ON" : "OFF"}**`
+        `Logs have been turned ${logsEnabled ? "ON" : "OFF"}`
       );
       await logToChannel(
-        `📝 ${interaction.user.tag} issued /logs — set to **${
-          logsEnabled ? "ON" : "OFF"
-        }**`
+        `${interaction.user.tag} issued /logs — set to ${logsEnabled ? "ON" : "OFF"}`
       );
     } catch (err) {
       console.error("Interaction /logs error:", err);
@@ -132,7 +130,7 @@ client.on("interactionCreate", async (interaction) => {
       }
       siteShutdown = true;
       await interaction.reply("The app has been shut down.");
-      await logToChannel(`🚨 ${interaction.user.tag} issued /shutdown`);
+      await logToChannel(`${interaction.user.tag} issued /shutdown`);
     } catch (err) {
       console.error("Interaction /shutdown error:", err);
     }
@@ -153,7 +151,7 @@ client.on("interactionCreate", async (interaction) => {
       }
       siteShutdown = false;
       await interaction.reply("The app is back online.");
-      await logToChannel(`✅ ${interaction.user.tag} issued /turnon`);
+      await logToChannel(`${interaction.user.tag} issued /turnon`);
     } catch (err) {
       console.error("Interaction /turnon error:", err);
     }
@@ -192,7 +190,7 @@ async function registerCommands() {
     await rest.put(Discord.Routes.applicationCommands(client.user.id), {
       body: commands,
     });
-    console.log("✅ Slash commands registered.");
+    console.log("Slash commands registered.");
   } catch (err) {
     console.error("Failed to register slash commands:", err);
   }
@@ -307,7 +305,7 @@ async function startWorker(token) {
   }
 
   async function restart() {
-    console.log("🔄 Restarting worker...");
+    console.log("Restarting worker...");
     try {
       await fnlb.stop();
     } catch {}
@@ -362,7 +360,7 @@ app.post("/start", async (req, res) => {
   if (!token) return res.status(500).json({ error: "API_TOKEN missing" });
   if (!category) return res.status(400).json({ error: "user id required" });
   if (categories.length >= MAX_SLOTS)
-    return res.status(400).json({ error: "❌ Server full" });
+    return res.status(400).json({ error: "Server full" });
 
   if (!categories.includes(category)) categories.push(category);
 
@@ -446,4 +444,4 @@ Account Level: ${accountLevel}`;
 
 // ---- Start server ----
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
