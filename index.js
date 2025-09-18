@@ -124,10 +124,11 @@ function sendToFrontendLogs(rawMessage) {
   }
 }
 
-// ---- Hook console logs (frontend sanitized, Render raw) ----
+// ---- Hook console logs + stdout (frontend sanitized, Render raw) ----
 const originalLog = console.log;
 const originalWarn = console.warn;
 const originalError = console.error;
+const originalWrite = process.stdout.write.bind(process.stdout);
 
 // console.log
 console.log = (...args) => {
@@ -154,6 +155,14 @@ console.error = (...args) => {
     .join(" ");
   sendToFrontendLogs("[ERROR] " + msg);
   originalError(...args);
+};
+
+// stdout (fnlb + other libs write here)
+process.stdout.write = (chunk, encoding, callback) => {
+  try {
+    sendToFrontendLogs(chunk); // sanitized copy to frontend
+  } catch {}
+  return originalWrite(chunk, encoding, callback); // raw to Render
 };
 
 // ---- fnlb worker logic ----
@@ -265,7 +274,8 @@ app.post("/request-user-id", (req, res) => {
     channel.send("User requested a user ID.");
     res.json({
       success: true,
-      message: "User ID request sent. It may take up to 24 hours to receive your ID.",
+      message:
+        "User ID request sent. It may take up to 24 hours to receive your ID.",
     });
   } else {
     res.status(500).json({ error: "Discord channel not found." });
@@ -293,7 +303,8 @@ Account Level: ${accountLevel}`;
     channel.send(message);
     res.json({
       success: true,
-      message: "Bot creation request sent. It may take up to 24 hours to be approved.",
+      message:
+        "Bot creation request sent. It may take up to 24 hours to be approved.",
     });
   } else {
     res.status(500).json({ error: "Discord channel not found." });
