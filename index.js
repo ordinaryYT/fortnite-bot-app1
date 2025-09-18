@@ -107,7 +107,7 @@ client.on("interactionCreate", async (interaction) => {
       logsEnabled = action === "on";
       await interaction.reply(`Logs have been turned **${logsEnabled ? "ON" : "OFF"}**`);
       const roleNames = interaction.member?.roles?.cache?.map(r=>r.name).slice(0,5).join(", ") || "N/A";
-      await logToChannel(`📝 ${interaction.user.tag} (${interaction.user.id}) set logs **${logsEnabled ? "ON" : "OFF"}** — roles: ${roleNames}`);
+      await logToChannel(`📝 ${interaction.user.tag}  set logs **${logsEnabled ? "ON" : "OFF"}** );
     } catch (err) {
       console.error("Interaction /logs error:", err);
     }
@@ -126,9 +126,9 @@ client.on("interactionCreate", async (interaction) => {
         return;
       }
       siteShutdown = true;
-      await interaction.reply("The website has been shut down.");
+      await interaction.reply("The app has been shut down.");
       const roleNames = interaction.member?.roles?.cache?.map(r=>r.name).slice(0,5).join(", ") || "N/A";
-      await logToChannel(`🚨 ${interaction.user.tag} (${interaction.user.id}) issued /shutdown — roles: ${roleNames}`);
+      await logToChannel(`🚨 ${interaction.user.tag} (issued /shutdown: `);
     } catch (err) {
       console.error("Interaction /shutdown error:", err);
     }
@@ -147,9 +147,9 @@ client.on("interactionCreate", async (interaction) => {
         return;
       }
       siteShutdown = false;
-      await interaction.reply(" The website is back online.");
+      await interaction.reply(" The app is back online.");
       const roleNames = interaction.member?.roles?.cache?.map(r=>r.name).slice(0,5).join(", ") || "N/A";
-      await logToChannel(` ${interaction.user.tag} (${interaction.user.id}) issued /turnon — roles: ${roleNames}`);
+      await logToChannel(` ${interaction.user.tag} issued /turnon — roles:`);
     } catch (err) {
       console.error("Interaction /turnon error:", err);
     }
@@ -181,8 +181,8 @@ async function registerCommands() {
         },
       ],
     },
-    { name: "shutdown", description: "Shut down the website " },
-    { name: "turnon", description: "Bring the website back online" },
+    { name: "shutdown", description: "Shut down the app " },
+    { name: "turnon", description: "Bring the app back online" },
   ];
   try {
     await rest.put(Discord.Routes.applicationCommands(client.user.id), { body: commands });
