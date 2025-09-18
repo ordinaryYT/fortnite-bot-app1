@@ -108,7 +108,7 @@ client.on("interactionCreate", async (interaction) => {
         `Logs have been turned **${logsEnabled ? "ON" : "OFF"}**`
       );
       await logToChannel(
-        `📝 ${interaction.user.tag} set logs **${
+        `📝 ${interaction.user.tag} issued /logs — set to **${
           logsEnabled ? "ON" : "OFF"
         }**`
       );
@@ -404,7 +404,7 @@ app.get("/inbox", (req, res) => {
 app.post("/request-user-id", (req, res) => {
   const channel = client.channels.cache.get(DISCORD_CHANNEL_ID);
   if (channel) {
-    channel.send("User requested a user ID.");
+    channel.send("User requested a user ID via the app.");
     res.json({
       success: true,
       message:
@@ -426,7 +426,7 @@ app.post("/create-bot", (req, res) => {
   } = req.body;
   const channel = client.channels.cache.get(DISCORD_CHANNEL_ID);
   if (channel) {
-    const message = `User requested bot creation:
+    const message = `User requested bot creation via the app:
 Fortnite Name: ${fortniteName}
 Auto Accept Invites: ${autoAcceptInvites}
 Auto Accept Friends: ${autoAcceptFriends}
