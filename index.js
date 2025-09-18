@@ -1,153 +1,453 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>OGbots Control Panel</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <style>
-    :root {
-      --primary-bg: #0f0f23;
-      --secondary-bg: #1c1c38;
-      --card-bg: #252547;
-      --accent-purple: #6e40c9;
-      --accent-blue: #2b7cff;
-      --accent-green: #21c974;
-      --accent-red: #ff4365;
-      --text-primary: #ffffff;
-      --text-secondary: #a0a0c0;
-      --border-color: #3a3a62;
+import express from "express";
+import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
+import Discord from "discord.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+let logListeners = [];
+let categories = [];
+let worker = null;
+const MAX_SLOTS = 10;
+
+// Role IDs (replace these with real role IDs or set via env)
+const LOGS_ROLE_ID = process.env.LOGS_ROLE_ID || "123456789012345678";
+const ADMIN_ROLE_ID = process.env.ADMIN_ROLE_ID || "987654321098765432";
+
+// Feature toggles
+let logsEnabled = true;
+let siteShutdown = false;
+
+// Discord bot setup
+const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
+const DISCORD_CHANNEL_ID = process.env.DISCORD_CHANNEL_ID;
+let inboxMessages = [];
+
+const client = new Discord.Client({
+  intents: [
+    Discord.GatewayIntentBits.Guilds,
+    Discord.GatewayIntentBits.GuildMessages,
+    Discord.GatewayIntentBits.MessageContent,
+  ],
+});
+
+client.once("ready", () => {
+  console.log(`Discord bot logged in as ${client.user.tag}`);
+  registerCommands();
+});
+
+client.on("messageCreate", async (message) => {
+  if (message.author.bot) return;
+  if (message.channel.id !== DISCORD_CHANNEL_ID) return;
+
+  const content = message.content.toLowerCase();
+
+  if (content.startsWith("approve ")) {
+    const parts = message.content.split(" ");
+    if (parts.length >= 2) {
+      const userID = parts[1];
+      inboxMessages.push({
+        type: "user_id",
+        message: `Your user ID has been approved: ${userID}`,
+        date: new Date().toLocaleString(),
+      });
+      message.reply(`User ID ${userID} approved and added to inbox.`);
     }
-    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-    body { background: var(--primary-bg); color: var(--text-primary); min-height: 100vh; display: flex; flex-direction: column; }
-    .header { background: var(--secondary-bg); padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); }
-    .logo { display: flex; align-items: center; gap: 0.8rem; font-size: 1.5rem; font-weight: 700; color: var(--text-primary); }
-    .logo i { color: var(--accent-purple); }
-    .main-container { display: flex; flex: 1; }
-    .sidebar { width: 250px; background: var(--secondary-bg); padding: 1.5rem 0; border-right: 1px solid var(--border-color); display: flex; flex-direction: column; }
-    .nav-item { padding: 0.9rem 1.5rem; display: flex; align-items: center; gap: 0.8rem; color: var(--text-secondary); cursor: pointer; border-left: 4px solid transparent; }
-    .nav-item:hover, .nav-item.active { background: rgba(110, 64, 201, 0.1); color: var(--text-primary); border-left-color: var(--accent-purple); }
-    .content { flex: 1; padding: 2rem; overflow-y: auto; }
-    .section-title { font-size: 1.4rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.8rem; }
-    .card { background: var(--card-bg); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
-    .input-group { margin-bottom: 1.2rem; }
-    .input-group label { display: block; margin-bottom: 0.5rem; color: var(--text-secondary); }
-    .input-group input, .input-group select { width: 100%; padding: 0.8rem 1rem; border-radius: 8px; border: 1px solid var(--border-color); background: var(--secondary-bg); color: var(--text-primary); }
-    .status-indicator { display: flex; align-items: center; gap: 0.5rem; margin: 1rem 0; padding: 0.8rem; border-radius: 8px; background: var(--secondary-bg); }
-    .status-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent-red); }
-    .status-dot.running { background: var(--accent-green); }
-    .btn-group { display: flex; gap: 1rem; margin-top: 1.5rem; }
-    .btn { padding: 0.8rem 1.5rem; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; }
-    .btn-primary { background: var(--accent-purple); color: white; }
-    .btn-danger { background: var(--accent-red); color: white; }
-    .btn-info { background: var(--accent-blue); color: white; }
-    .log-container { background: var(--secondary-bg); border-radius: 12px; overflow: hidden; }
-    .log-header { padding: 1rem 1.5rem; background: rgba(0,0,0,0.2); display:flex; justify-content: space-between; align-items:center; }
-    .log-content { padding: 1rem; height: 300px; overflow-y: auto; font-family: 'Consolas', monospace; font-size: 0.9rem; }
-    .bot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.5rem; }
-    .bot-card { background: var(--card-bg); border-radius: 12px; overflow: hidden; }
-    .bot-header { padding: 1rem; background: rgba(110, 64, 201, 0.2); display: flex; justify-content: space-between; align-items: center; }
-    .bot-name { font-weight: 600; }
-    .bot-status { font-size: 0.8rem; padding: 0.3rem 0.8rem; border-radius: 20px; background: var(--accent-green); color: white; }
-    .hidden { display: none; }
-    .category-list { margin-top: 1rem; }
-    .category-item { padding: 0.5rem; background: var(--secondary-bg); margin-bottom: 0.5rem; border-radius: 6px; display: flex; justify-content: space-between; }
-    .slots-indicator { margin: 1rem 0; font-weight: 600; }
-    .inbox-message { padding: 1rem; background: var(--secondary-bg); margin-bottom: 0.5rem; border-radius: 8px; }
-    .modal { position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; }
-    .modal-content { background: var(--card-bg); padding: 2rem; border-radius: 12px; width: 80%; max-width: 500px; position: relative; }
-    .close { color: #aaa; position: absolute; top: 10px; right: 15px; font-size: 28px; font-weight: bold; cursor: pointer; }
-    .close:hover { color: white; }
-    .modal-title { margin-bottom: 1rem; text-align: center; }
-    .modal-message { text-align: center; margin-bottom: 1.5rem; }
+  }
 
-    /* 🔥 Shutdown overlay */
-    #shutdownOverlay {
-      position: fixed;
-      z-index: 9999;
-      top:0; left:0; width:100%; height:100%;
-      background: black;
-      color: white;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      flex-direction: column;
-      font-family: 'Segoe UI', sans-serif;
-      text-align: center;
-      font-size: 1.5rem;
-      padding: 2rem;
-      display: none;
+  if (content.startsWith("approve bot ")) {
+    const parts = message.content.split(" ");
+    if (parts.length >= 3) {
+      const botName = parts[2];
+      inboxMessages.push({
+        type: "bot",
+        message: `Your bot ${botName} has been approved.`,
+        date: new Date().toLocaleString(),
+      });
+      message.reply(`Bot ${botName} approved and added to inbox.`);
     }
-    #shutdownOverlay h1 {
-      font-size: 2.5rem;
-      margin-bottom: 1rem;
-      color: var(--accent-red);
+  }
+});
+
+// ---------------------
+// Slash command handling (new)
+// ---------------------
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
+
+  // helper to log to the configured Discord channel
+  const logToChannel = async (msg) => {
+    try {
+      const channel = client.channels.cache.get(DISCORD_CHANNEL_ID);
+      if (channel) await channel.send(msg);
+    } catch (e) {
+      console.error("Failed to send audit log to channel:", e);
     }
-    #shutdownOverlay p {
-      color: #ccc;
-      max-width: 600px;
-    }
-  </style>
-</head>
-<body>
-  <!-- 🔥 Shutdown overlay -->
-  <div id="shutdownOverlay">
-    <h1>⚠️ Website Temporarily Offline</h1>
-    <p>Moderators have temporarily turned this website off due to an issue or an update.<br>
-       Please check back later.</p>
-  </div>
+  };
 
-  <header class="header">
-    <div class="logo">
-      <i class="fas fa-robot"></i>
-      <span>OGbots</span>
-    </div>
-  </header>
-
-  <div class="main-container">
-    <nav class="sidebar">
-      <div class="nav-item active" onclick="showView('dashboard')"><i class="fas fa-home"></i><span>Dashboard</span></div>
-      <div class="nav-item" onclick="showView('mybots')"><i class="fas fa-server"></i><span>My Bots</span></div>
-      <div class="nav-item" onclick="showView('public')"><i class="fas fa-globe"></i><span>Public Bots</span></div>
-      <div class="nav-item" onclick="showView('inbox')"><i class="fas fa-inbox"></i><span>Inbox</span></div>
-    </nav>
-
-    <main class="content">
-      <!-- All your sections (dashboard, mybots, public, inbox) remain unchanged -->
-      <!-- ... everything from your original HTML ... -->
-    </main>
-  </div>
-
-  <!-- Modals (unchanged) -->
-  <!-- ... createBotModal, publicBotModal ... -->
-
-  <script>
-    // === Your original JavaScript (unchanged) ===
-    // ... all the code handling logs, modals, bots, inbox, etc. ...
-
-    // === Init ===
-    updateStatus();
-    setInterval(updateStatus, 5000);
-    initLogStream();
-    applyReplacements();
-
-    // 🔥 Shutdown overlay polling
-    async function checkSiteStatus() {
-      try {
-        const res = await fetch("/site-status");
-        const data = await res.json();
-        const overlay = document.getElementById("shutdownOverlay");
-        if (data.shutdown) {
-          overlay.style.display = "flex";
-        } else {
-          overlay.style.display = "none";
-        }
-      } catch (err) {
-        console.error("Status check failed", err);
+  // /logs action:on|off
+  if (interaction.commandName === "logs") {
+    // permission: role check
+    try {
+      const hasRole =
+        interaction.member && interaction.member.roles && interaction.member.roles.cache
+          ? interaction.member.roles.cache.has(LOGS_ROLE_ID)
+          : false;
+      if (!hasRole) {
+        await interaction.reply({ content: "❌ You don’t have permission to use this.", ephemeral: true });
+        return;
       }
+      const action = interaction.options.getString("action");
+      logsEnabled = action === "on";
+      await interaction.reply(`✅ Logs have been turned **${logsEnabled ? "ON" : "OFF"}**`);
+      const roleNames = interaction.member?.roles?.cache?.map(r=>r.name).slice(0,5).join(", ") || "N/A";
+      await logToChannel(`📝 ${interaction.user.tag} (${interaction.user.id}) set logs **${logsEnabled ? "ON" : "OFF"}** — roles: ${roleNames}`);
+    } catch (err) {
+      console.error("Interaction /logs error:", err);
     }
-    setInterval(checkSiteStatus, 5000);
-    checkSiteStatus();
-  </script>
-</body>
-</html>
+    return;
+  }
+
+  // /shutdown
+  if (interaction.commandName === "shutdown") {
+    try {
+      const hasRole =
+        interaction.member && interaction.member.roles && interaction.member.roles.cache
+          ? interaction.member.roles.cache.has(ADMIN_ROLE_ID)
+          : false;
+      if (!hasRole) {
+        await interaction.reply({ content: "❌ You don’t have permission to use this.", ephemeral: true });
+        return;
+      }
+      siteShutdown = true;
+      await interaction.reply("🛑 The website has been shut down with blackout screen.");
+      const roleNames = interaction.member?.roles?.cache?.map(r=>r.name).slice(0,5).join(", ") || "N/A";
+      await logToChannel(`🚨 ${interaction.user.tag} (${interaction.user.id}) issued /shutdown — roles: ${roleNames}`);
+    } catch (err) {
+      console.error("Interaction /shutdown error:", err);
+    }
+    return;
+  }
+
+  // /turnon
+  if (interaction.commandName === "turnon") {
+    try {
+      const hasRole =
+        interaction.member && interaction.member.roles && interaction.member.roles.cache
+          ? interaction.member.roles.cache.has(ADMIN_ROLE_ID)
+          : false;
+      if (!hasRole) {
+        await interaction.reply({ content: "❌ You don’t have permission to use this.", ephemeral: true });
+        return;
+      }
+      siteShutdown = false;
+      await interaction.reply("✅ The website is back online.");
+      const roleNames = interaction.member?.roles?.cache?.map(r=>r.name).slice(0,5).join(", ") || "N/A";
+      await logToChannel(`✅ ${interaction.user.tag} (${interaction.user.id}) issued /turnon — roles: ${roleNames}`);
+    } catch (err) {
+      console.error("Interaction /turnon error:", err);
+    }
+    return;
+  }
+});
+
+// Register slash commands (global). If you want instant availability, register guild commands instead.
+async function registerCommands() {
+  if (!DISCORD_TOKEN) {
+    console.log("DISCORD_TOKEN not set, skipping command register");
+    return;
+  }
+  const rest = new Discord.REST({ version: "10" }).setToken(DISCORD_TOKEN);
+  const commands = [
+    {
+      name: "logs",
+      description: "Turn logs on or off",
+      options: [
+        {
+          type: 3, // STRING
+          name: "action",
+          description: "on or off",
+          required: true,
+          choices: [
+            { name: "on", value: "on" },
+            { name: "off", value: "off" },
+          ],
+        },
+      ],
+    },
+    { name: "shutdown", description: "Shut down the website (blackout screen)" },
+    { name: "turnon", description: "Bring the website back online" },
+  ];
+  try {
+    await rest.put(Discord.Routes.applicationCommands(client.user.id), { body: commands });
+    console.log("✅ Slash commands registered.");
+  } catch (err) {
+    console.error("Failed to register slash commands:", err);
+  }
+}
+
+if (DISCORD_TOKEN) {
+  client.login(DISCORD_TOKEN);
+} else {
+  console.log("DISCORD_TOKEN not set, skipping bot login");
+}
+
+// ---- Timestamp helper ----
+function timestamp() {
+  return new Date().toISOString().split("T")[1].split(".")[0];
+}
+
+// ---- Send logs to frontend (sanitized) ----
+function sendToFrontendLogs(rawMessage) {
+  if (!rawMessage && rawMessage !== 0) return;
+  if (!logsEnabled) return; // respect the toggle
+
+  const lines = String(rawMessage).split(/\r?\n/);
+
+  for (let line of lines) {
+    if (!line.trim()) continue;
+
+    // Clean version for frontend
+    let clean = line.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "").trim();
+
+    // sanitize sensitive stuff
+    clean = clean.replace(/fnlb/gi, ""); // hide fnlb
+    clean = clean.replace(/\[\d{2}:\d{2}:\d{2}\]/g, "").trim();
+
+    // filters
+    if (/playlist_/i.test(clean)) continue;
+    if (/ua:/i.test(clean)) continue;
+    if (/pb:/i.test(clean)) continue;
+    if (/hotfix/i.test(clean)) continue;
+    if (/netCL/i.test(clean)) continue;
+    if (/Connecting \(http/i.test(clean)) continue;
+
+    // replacements
+    clean = clean.replace(
+      /Starting shard with ID:\s*(.+)/i,
+      "Starting OGbot with ID: $1"
+    );
+    clean = clean.replace(/categories:\s*/gi, "User ID: ");
+
+    if (/Cluster:.*User ID:/i.test(clean)) {
+      const slotsUsed = categories.length;
+      clean = `user id: ${slotsUsed}. server slots used: ${slotsUsed}/${MAX_SLOTS}`;
+    }
+
+    clean = clean.replace(/^\[[^\]]+\]\s*/g, "").trim();
+    if (!clean.trim()) continue;
+
+    const out = `[${timestamp()}] ${clean}`;
+    logListeners.forEach((res) => {
+      try {
+        res.write(`data: ${out}\n\n`);
+      } catch {}
+    });
+  }
+}
+
+// ---- Hook console logs + stdout (frontend sanitized, Render raw) ----
+const originalLog = console.log;
+const originalWarn = console.warn;
+const originalError = console.error;
+const originalWrite = process.stdout.write.bind(process.stdout);
+
+// console.log
+console.log = (...args) => {
+  const msg = args
+    .map((a) => (typeof a === "object" ? JSON.stringify(a) : String(a)))
+    .join(" ");
+  sendToFrontendLogs(msg); // sanitized for website
+  originalLog(...args); // raw for Render
+};
+
+// console.warn
+console.warn = (...args) => {
+  const msg = args
+    .map((a) => (typeof a === "object" ? JSON.stringify(a) : String(a)))
+    .join(" ");
+  sendToFrontendLogs("[WARN] " + msg);
+  originalWarn(...args);
+};
+
+// console.error
+console.error = (...args) => {
+  const msg = args
+    .map((a) => (typeof a === "object" ? JSON.stringify(a) : String(a)))
+    .join(" ");
+  sendToFrontendLogs("[ERROR] " + msg);
+  originalError(...args);
+};
+
+// stdout (fnlb + other libs write here)
+process.stdout.write = (chunk, encoding, callback) => {
+  try {
+    sendToFrontendLogs(chunk); // sanitized copy to frontend
+  } catch {}
+  return originalWrite(chunk, encoding, callback); // raw to Render
+};
+
+// ---- fnlb worker logic ----
+async function startWorker(token) {
+  const FNLB = await import("fnlb");
+  const fnlb = new FNLB.default();
+
+  async function start() {
+    await fnlb.start({
+      apiToken: token,
+      numberOfShards: 1,
+      botsPerShard: 10,
+      categories,
+      logLevel: "INFO",
+    });
+  }
+
+  async function restart() {
+    console.log("🔄 Restarting worker...");
+    try {
+      await fnlb.stop();
+    } catch {}
+    await start();
+  }
+
+  await start();
+  const interval = setInterval(restart, 3600000);
+  worker = { fnlb, interval };
+  return true;
+}
+
+async function stopWorker() {
+  if (worker) {
+    clearInterval(worker.interval);
+    try {
+      await worker.fnlb.stop();
+    } catch {}
+    worker = null;
+    categories = [];
+    return true;
+  }
+  return false;
+}
+
+// ---- Routes ----
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
+});
+
+// site shutdown state
+app.get("/site-status", (req, res) => {
+  res.json({ shutdown: siteShutdown });
+});
+
+// logs SSE (respects logsEnabled)
+app.get("/logs", (req, res) => {
+  if (!logsEnabled) {
+    return res.status(403).end("Logs are currently disabled by moderators.");
+  }
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+  logListeners.push(res);
+  req.on("close", () => {
+    logListeners = logListeners.filter((r) => r !== res);
+  });
+});
+
+app.post("/start", async (req, res) => {
+  const { category } = req.body;
+  const token = process.env.API_TOKEN;
+  if (!token) return res.status(500).json({ error: "API_TOKEN missing" });
+  if (!category) return res.status(400).json({ error: "user id required" });
+  if (categories.length >= MAX_SLOTS)
+    return res.status(400).json({ error: "❌ Server full" });
+
+  if (!categories.includes(category)) categories.push(category);
+
+  if (!worker) {
+    const started = await startWorker(token);
+    if (started) res.json({ success: true, "user id": categories });
+    else res.status(500).json({ error: "Failed to start worker" });
+  } else {
+    try {
+      await stopWorker();
+      await startWorker(token);
+      res.json({ success: true, "user id": categories });
+    } catch {
+      res.status(500).json({ error: "Failed to update categories" });
+    }
+  }
+});
+
+app.post("/stop", async (req, res) => {
+  const stopped = await stopWorker();
+  if (stopped) res.json({ success: true, message: "Worker stopped" });
+  else res.json({ success: false, message: "No worker running" });
+});
+
+app.get("/status", (req, res) => {
+  res.json({
+    running: !!worker,
+    "user id": categories,
+    slotsUsed: categories.length,
+    slotsMax: MAX_SLOTS,
+  });
+});
+
+// New routes for Discord integration
+app.get("/inbox", (req, res) => {
+  res.json(inboxMessages);
+});
+
+app.post("/request-user-id", (req, res) => {
+  const channel = client.channels.cache.get(DISCORD_CHANNEL_ID);
+  if (channel) {
+    channel.send("User requested a user ID.");
+    res.json({
+      success: true,
+      message:
+        "User ID request sent. It may take up to 24 hours to receive your ID.",
+    });
+  } else {
+    res.status(500).json({ error: "Discord channel not found." });
+  }
+});
+
+app.post("/create-bot", (req, res) => {
+  const {
+    fortniteName,
+    autoAcceptInvites,
+    autoAcceptFriends,
+    startSkin,
+    joinEmote,
+    accountLevel,
+  } = req.body;
+  const channel = client.channels.cache.get(DISCORD_CHANNEL_ID);
+  if (channel) {
+    const message = `User requested bot creation:
+Fortnite Name: ${fortniteName}
+Auto Accept Invites: ${autoAcceptInvites}
+Auto Accept Friends: ${autoAcceptFriends}
+Start Skin: ${startSkin}
+Join Emote: ${joinEmote}
+Account Level: ${accountLevel}`;
+    channel.send(message);
+    res.json({
+      success: true,
+      message:
+        "Bot creation request sent. It may take up to 24 hours to be approved.",
+    });
+  } else {
+    res.status(500).json({ error: "Discord channel not found." });
+  }
+});
+
+// ---- Start server ----
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
