@@ -16,7 +16,7 @@ let categories = [];
 let worker = null;
 const MAX_SLOTS = 10;
 
-// Role IDs (replace these with real role IDs or set via env)
+// Role IDs (replace with real role IDs or set via env)
 const LOGS_ROLE_ID = process.env.LOGS_ROLE_ID || "123456789012345678";
 const ADMIN_ROLE_ID = process.env.ADMIN_ROLE_ID || "987654321098765432";
 
@@ -76,12 +76,11 @@ client.on("messageCreate", async (message) => {
 });
 
 // ---------------------
-// Slash command handling (new)
+// Slash command handling
 // ---------------------
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
-  // helper to log to the configured Discord channel
   const logToChannel = async (msg) => {
     try {
       const channel = client.channels.cache.get(DISCORD_CHANNEL_ID);
@@ -93,21 +92,26 @@ client.on("interactionCreate", async (interaction) => {
 
   // /logs action:on|off
   if (interaction.commandName === "logs") {
-    // permission: role check
     try {
       const hasRole =
-        interaction.member && interaction.member.roles && interaction.member.roles.cache
-          ? interaction.member.roles.cache.has(LOGS_ROLE_ID)
-          : false;
+        interaction.member?.roles?.cache?.has(LOGS_ROLE_ID) || false;
       if (!hasRole) {
-        await interaction.reply({ content: "You don’t have permission to use this.", ephemeral: true });
+        await interaction.reply({
+          content: "You don’t have permission to use this.",
+          ephemeral: true,
+        });
         return;
       }
       const action = interaction.options.getString("action");
       logsEnabled = action === "on";
-      await interaction.reply(`Logs have been turned **${logsEnabled ? "ON" : "OFF"}**`);
-      const roleNames = interaction.member?.roles?.cache?.map(r=>r.name).slice(0,5).join(", ") || "N/A";
-      await logToChannel(`📝 ${interaction.user.tag}  set logs **${logsEnabled ? "ON" : "OFF"}** );
+      await interaction.reply(
+        `Logs have been turned **${logsEnabled ? "ON" : "OFF"}**`
+      );
+      await logToChannel(
+        `📝 ${interaction.user.tag} set logs **${
+          logsEnabled ? "ON" : "OFF"
+        }**`
+      );
     } catch (err) {
       console.error("Interaction /logs error:", err);
     }
@@ -118,17 +122,17 @@ client.on("interactionCreate", async (interaction) => {
   if (interaction.commandName === "shutdown") {
     try {
       const hasRole =
-        interaction.member && interaction.member.roles && interaction.member.roles.cache
-          ? interaction.member.roles.cache.has(ADMIN_ROLE_ID)
-          : false;
+        interaction.member?.roles?.cache?.has(ADMIN_ROLE_ID) || false;
       if (!hasRole) {
-        await interaction.reply({ content: " You don’t have permission to use this.", ephemeral: true });
+        await interaction.reply({
+          content: "You don’t have permission to use this.",
+          ephemeral: true,
+        });
         return;
       }
       siteShutdown = true;
       await interaction.reply("The app has been shut down.");
-      const roleNames = interaction.member?.roles?.cache?.map(r=>r.name).slice(0,5).join(", ") || "N/A";
-      await logToChannel(`🚨 ${interaction.user.tag} (issued /shutdown: `);
+      await logToChannel(`🚨 ${interaction.user.tag} issued /shutdown`);
     } catch (err) {
       console.error("Interaction /shutdown error:", err);
     }
@@ -139,17 +143,17 @@ client.on("interactionCreate", async (interaction) => {
   if (interaction.commandName === "turnon") {
     try {
       const hasRole =
-        interaction.member && interaction.member.roles && interaction.member.roles.cache
-          ? interaction.member.roles.cache.has(ADMIN_ROLE_ID)
-          : false;
+        interaction.member?.roles?.cache?.has(ADMIN_ROLE_ID) || false;
       if (!hasRole) {
-        await interaction.reply({ content: " You don’t have permission to use this.", ephemeral: true });
+        await interaction.reply({
+          content: "You don’t have permission to use this.",
+          ephemeral: true,
+        });
         return;
       }
       siteShutdown = false;
-      await interaction.reply(" The app is back online.");
-      const roleNames = interaction.member?.roles?.cache?.map(r=>r.name).slice(0,5).join(", ") || "N/A";
-      await logToChannel(` ${interaction.user.tag} issued /turnon — roles:`);
+      await interaction.reply("The app is back online.");
+      await logToChannel(`✅ ${interaction.user.tag} issued /turnon`);
     } catch (err) {
       console.error("Interaction /turnon error:", err);
     }
@@ -157,7 +161,7 @@ client.on("interactionCreate", async (interaction) => {
   }
 });
 
-// Register slash commands (global). If you want instant availability, register guild commands instead.
+// Register slash commands
 async function registerCommands() {
   if (!DISCORD_TOKEN) {
     console.log("DISCORD_TOKEN not set, skipping command register");
@@ -181,11 +185,13 @@ async function registerCommands() {
         },
       ],
     },
-    { name: "shutdown", description: "Shut down the app " },
+    { name: "shutdown", description: "Shut down the app" },
     { name: "turnon", description: "Bring the app back online" },
   ];
   try {
-    await rest.put(Discord.Routes.applicationCommands(client.user.id), { body: commands });
+    await rest.put(Discord.Routes.applicationCommands(client.user.id), {
+      body: commands,
+    });
     console.log("✅ Slash commands registered.");
   } catch (err) {
     console.error("Failed to register slash commands:", err);
@@ -203,24 +209,21 @@ function timestamp() {
   return new Date().toISOString().split("T")[1].split(".")[0];
 }
 
-// ---- Send logs to frontend (sanitized) ----
+// ---- Send logs to frontend ----
 function sendToFrontendLogs(rawMessage) {
   if (!rawMessage && rawMessage !== 0) return;
-  if (!logsEnabled) return; // respect the toggle
+  if (!logsEnabled) return;
 
   const lines = String(rawMessage).split(/\r?\n/);
 
   for (let line of lines) {
     if (!line.trim()) continue;
 
-    // Clean version for frontend
     let clean = line.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "").trim();
 
-    // sanitize sensitive stuff
-    clean = clean.replace(/fnlb/gi, ""); // hide fnlb
+    clean = clean.replace(/fnlb/gi, "");
     clean = clean.replace(/\[\d{2}:\d{2}:\d{2}\]/g, "").trim();
 
-    // filters
     if (/playlist_/i.test(clean)) continue;
     if (/ua:/i.test(clean)) continue;
     if (/pb:/i.test(clean)) continue;
@@ -228,7 +231,6 @@ function sendToFrontendLogs(rawMessage) {
     if (/netCL/i.test(clean)) continue;
     if (/Connecting \(http/i.test(clean)) continue;
 
-    // replacements
     clean = clean.replace(
       /Starting shard with ID:\s*(.+)/i,
       "Starting OGbot with ID: $1"
@@ -252,22 +254,20 @@ function sendToFrontendLogs(rawMessage) {
   }
 }
 
-// ---- Hook console logs + stdout (frontend sanitized, Render raw) ----
+// ---- Hook console + stdout ----
 const originalLog = console.log;
 const originalWarn = console.warn;
 const originalError = console.error;
 const originalWrite = process.stdout.write.bind(process.stdout);
 
-// console.log
 console.log = (...args) => {
   const msg = args
     .map((a) => (typeof a === "object" ? JSON.stringify(a) : String(a)))
     .join(" ");
-  sendToFrontendLogs(msg); // sanitized for website
-  originalLog(...args); // raw for Render
+  sendToFrontendLogs(msg);
+  originalLog(...args);
 };
 
-// console.warn
 console.warn = (...args) => {
   const msg = args
     .map((a) => (typeof a === "object" ? JSON.stringify(a) : String(a)))
@@ -276,7 +276,6 @@ console.warn = (...args) => {
   originalWarn(...args);
 };
 
-// console.error
 console.error = (...args) => {
   const msg = args
     .map((a) => (typeof a === "object" ? JSON.stringify(a) : String(a)))
@@ -285,12 +284,11 @@ console.error = (...args) => {
   originalError(...args);
 };
 
-// stdout (fnlb + other libs write here)
 process.stdout.write = (chunk, encoding, callback) => {
   try {
-    sendToFrontendLogs(chunk); // sanitized copy to frontend
+    sendToFrontendLogs(chunk);
   } catch {}
-  return originalWrite(chunk, encoding, callback); // raw to Render
+  return originalWrite(chunk, encoding, callback);
 };
 
 // ---- fnlb worker logic ----
@@ -340,12 +338,10 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
 
-// site shutdown state
 app.get("/site-status", (req, res) => {
   res.json({ shutdown: siteShutdown });
 });
 
-// logs SSE (respects logsEnabled)
 app.get("/logs", (req, res) => {
   if (!logsEnabled) {
     return res.status(403).end("Logs are currently disabled by moderators.");
@@ -400,7 +396,7 @@ app.get("/status", (req, res) => {
   });
 });
 
-// New routes for Discord integration
+// Discord integration routes
 app.get("/inbox", (req, res) => {
   res.json(inboxMessages);
 });
