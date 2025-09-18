@@ -100,12 +100,12 @@ client.on("interactionCreate", async (interaction) => {
           ? interaction.member.roles.cache.has(LOGS_ROLE_ID)
           : false;
       if (!hasRole) {
-        await interaction.reply({ content: "❌ You don’t have permission to use this.", ephemeral: true });
+        await interaction.reply({ content: "You don’t have permission to use this.", ephemeral: true });
         return;
       }
       const action = interaction.options.getString("action");
       logsEnabled = action === "on";
-      await interaction.reply(`✅ Logs have been turned **${logsEnabled ? "ON" : "OFF"}**`);
+      await interaction.reply(`Logs have been turned **${logsEnabled ? "ON" : "OFF"}**`);
       const roleNames = interaction.member?.roles?.cache?.map(r=>r.name).slice(0,5).join(", ") || "N/A";
       await logToChannel(`📝 ${interaction.user.tag} (${interaction.user.id}) set logs **${logsEnabled ? "ON" : "OFF"}** — roles: ${roleNames}`);
     } catch (err) {
@@ -122,11 +122,11 @@ client.on("interactionCreate", async (interaction) => {
           ? interaction.member.roles.cache.has(ADMIN_ROLE_ID)
           : false;
       if (!hasRole) {
-        await interaction.reply({ content: "❌ You don’t have permission to use this.", ephemeral: true });
+        await interaction.reply({ content: " You don’t have permission to use this.", ephemeral: true });
         return;
       }
       siteShutdown = true;
-      await interaction.reply("🛑 The website has been shut down with blackout screen.");
+      await interaction.reply("The website has been shut down.");
       const roleNames = interaction.member?.roles?.cache?.map(r=>r.name).slice(0,5).join(", ") || "N/A";
       await logToChannel(`🚨 ${interaction.user.tag} (${interaction.user.id}) issued /shutdown — roles: ${roleNames}`);
     } catch (err) {
@@ -147,7 +147,7 @@ client.on("interactionCreate", async (interaction) => {
         return;
       }
       siteShutdown = false;
-      await interaction.reply("✅ The website is back online.");
+      await interaction.reply(" The website is back online.");
       const roleNames = interaction.member?.roles?.cache?.map(r=>r.name).slice(0,5).join(", ") || "N/A";
       await logToChannel(`✅ ${interaction.user.tag} (${interaction.user.id}) issued /turnon — roles: ${roleNames}`);
     } catch (err) {
