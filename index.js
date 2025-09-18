@@ -143,13 +143,13 @@ client.on("interactionCreate", async (interaction) => {
           ? interaction.member.roles.cache.has(ADMIN_ROLE_ID)
           : false;
       if (!hasRole) {
-        await interaction.reply({ content: "❌ You don’t have permission to use this.", ephemeral: true });
+        await interaction.reply({ content: " You don’t have permission to use this.", ephemeral: true });
         return;
       }
       siteShutdown = false;
       await interaction.reply(" The website is back online.");
       const roleNames = interaction.member?.roles?.cache?.map(r=>r.name).slice(0,5).join(", ") || "N/A";
-      await logToChannel(`✅ ${interaction.user.tag} (${interaction.user.id}) issued /turnon — roles: ${roleNames}`);
+      await logToChannel(` ${interaction.user.tag} (${interaction.user.id}) issued /turnon — roles: ${roleNames}`);
     } catch (err) {
       console.error("Interaction /turnon error:", err);
     }
@@ -181,7 +181,7 @@ async function registerCommands() {
         },
       ],
     },
-    { name: "shutdown", description: "Shut down the website (blackout screen)" },
+    { name: "shutdown", description: "Shut down the website " },
     { name: "turnon", description: "Bring the website back online" },
   ];
   try {
