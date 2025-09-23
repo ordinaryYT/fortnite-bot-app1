@@ -36,6 +36,7 @@ function checkSecret(req, res, next) {
   }
   next();
 }
+
 // === Existing routes (keep your original ones) ===
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
@@ -66,15 +67,17 @@ app.post("/execute-command", checkSecret, (req, res) => {
   console.log("Queued command:", command);
   res.json({ success: true, message: "Command queued", queueLength: commandQueue.length });
 });
+
 // === PC polling routes ===
 
 // Fetch the next command from queue
 app.get("/fetch-command", checkSecret, (req, res) => {
   if (commandQueue.length === 0) {
-    return res.json({ success: true, command: null });
+    return res.json({}); // 🔹 flatten empty response
   }
   const next = commandQueue[0];
-  res.json({ success: true, command: next });
+  // 🔹 Flatten so AHK gets {"id":123, "command":"text"}
+  res.json(next);
 });
 
 // Acknowledge command (remove from queue once executed)
@@ -86,6 +89,7 @@ app.post("/ack-command", checkSecret, (req, res) => {
   commandQueue = commandQueue.filter(cmd => cmd.id !== id);
   res.json({ success: true, message: "Command acknowledged" });
 });
+
 // === Discord client login ===
 client.once("ready", () => {
   console.log(`Logged in as ${client.user.tag}`);
