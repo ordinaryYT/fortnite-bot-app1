@@ -139,7 +139,7 @@
           </div>
         </div>
 
-        <!-- ✅ Execute Command Card (new feature) -->
+        <!-- Execute Command Card -->
         <div class="card" style="margin-top:1rem;">
           <h2 class="card-title">Execute Command (Your PC)</h2>
 
@@ -163,7 +163,7 @@
         </div>
         <div class="log-container">
           <div class="log-header">
-            <span>Live Logs</span>
+            <span>Live Logs (FNLB Only)</span>
           </div>
           <div class="log-content" id="output"></div>
         </div>
@@ -244,7 +244,7 @@
   </div>
 
   <script>
-    // === New Execute Command functions ===
+    // === Execute Command functions ===
     async function sendExecuteCommand() {
       const command = document.getElementById("cmdInput").value;
       const token = document.getElementById("cmdSecret").value;
@@ -278,6 +278,225 @@
       if (!data.success) alert("Failed to queue chat command: " + (data.error || JSON.stringify(data)));
       else document.getElementById("cmdInput").value = "";
     }
+
+    // === Persisted values (name and userId only) ===
+    const nameInput = document.getElementById("name");
+    const userIdInput = document.getElementById("userId");
+    const output = document.getElementById("output");
+    const clearBtn = document.getElementById("clearBtn");
+    const createBotModal = document.getElementById("createBotModal");
+    const publicBotModal = document.getElementById("publicBotModal");
+
+    nameInput.value = localStorage.getItem("name") || "";
+    userIdInput.value = localStorage.getItem("userId") || "";
+
+    nameInput.addEventListener("input", () => {
+      localStorage.setItem("name", nameInput.value);
+      applyReplacements();
+    });
+    userIdInput.addEventListener("input", () => {
+      localStorage.setItem("userId", userIdInput.value);
+      applyReplacements();
+    });
+    clearBtn.addEventListener("click", () => {
+      output.innerHTML = "";
+    });
+
+    // === Modal functions ===
+    function openCreateBotModal() {
+      createBotModal.style.display = "flex";
+    }
+    function closeCreateBotModal() {
+      createBotModal.style.display = "none";
+    }
+    function openPublicBotModal() {
+      const uid = userIdInput.value || "Not set";
+      publicBotModal.querySelector(".modal-message").innerHTML = `
+        <p>Thank you for your interest in our public bots!</p>
+        <p>Your User ID: <strong>${uid}</strong></p>
+        <p>Your request has been sent to our team.</p>
+        <p>We'll review your request and get back to you soon.</p>
+      `;
+      publicBotModal.style.display = "flex";
+    }
+    function closePublicBotModal() {
+      publicBotModal.style.display = "none";
+    }
+    window.addEventListener("click", (event) => {
+      if (event.target === createBotModal) closeCreateBotModal();
+      if (event.target === publicBotModal) closePublicBotModal();
+    });
+
+    // === Log handling (no saving) ===
+    function appendLog(data) {
+      let line = data;
+      if (nameInput.value) line = line.replace(/User ID:\s*[a-z0-9]+/gi, "User: " + nameInput.value);
+      const div = document.createElement("div");
+      div.textContent = line;
+      output.appendChild(div);
+      output.scrollTop = output.scrollHeight;
+    }
+    function applyReplacements() {
+      const name = nameInput.value;
+      output.querySelectorAll("div").forEach(div => {
+        let line = div.textContent;
+        if (name) line = line.replace(/User ID:\s*[a-z0-9]+/gi, "User: " + name);
+        div.textContent = line;
+      });
+    }
+    function initLogStream(){
+      const source = new EventSource("/logs");
+      source.onmessage = (event) => appendLog(event.data);
+      source.onerror = () => setTimeout(initLogStream, 5000);
+    }
+
+    // === Backend control ===
+    async function start() {
+      const userId = userIdInput.value;
+      if (!userId){ alert("Enter a User ID"); return; }
+      const res = await fetch("/start", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({category: userId})
+      });
+      appendLog(JSON.stringify(await res.json()));
+      updateStatus();
+    }
+    async function stop() {
+      const res = await fetch("/stop", {method: "POST"});
+      appendLog(JSON.stringify(await res.json()));
+      updateStatus();
+    }
+    async function updateStatus() {
+      const res = await fetch("/status");
+      const data = await res.json();
+      document.getElementById("statusDisplay").textContent = data.running ? "Status: Running" : "Status: Stopped";
+      document.getElementById("statusDot").classList.toggle("running", data.running);
+      document.getElementById("slotsDisplay").textContent = `Slots: ${data.slotsUsed}/${data.slotsMax}`;
+      const categoryList = document.getElementById("categoryList");
+      categoryList.innerHTML = "";
+      if (data["user id"] && data["user id"].length > 0) {
+        const title = document.createElement("div");
+        title.textContent = "Active User IDs:";
+        title.style.marginBottom = "0.5rem";
+        title.style.fontWeight = "bold";
+        categoryList.appendChild(title);
+        data["user id"].forEach(uid => {
+          const item = document.createElement("div");
+          item.className = "category-item";
+          item.textContent = uid;
+          categoryList.appendChild(item);
+        });
+      }
+      renderMyBots(data.slotsUsed);
+    }
+
+    function renderMyBots(count){
+      const container = document.getElementById("myBotsList");
+      container.innerHTML = "";
+      const botName = nameInput.value || "OGprivatebot";
+      for(let i = 1; i <= count; i++){
+        const div = document.createElement("div");
+        div.className = "bot-card";
+        div.innerHTML = `<div class="bot-header"><div class="bot-name">${botName}${i}</div><div class="bot-status">Running</div></div>`;
+        container.appendChild(div);
+      }
+      document.getElementById("myBotsCount").textContent = `Running: ${count}/10`;
+    }
+
+    function buildPublicBots(){
+      const container = document.getElementById("publicBotsList");
+      container.innerHTML = "";
+      for(let i = 1; i <= 75; i++){
+        const div = document.createElement("div");
+        div.className = "bot-card";
+        div.innerHTML = `
+          <div class="bot-header">
+            <div class="bot-name">OGsbot${i}</div>
+            <div class="bot-status">Running</div>
+          </div>
+        `;
+        container.appendChild(div);
+      }
+    }
+
+    // === Discord functions ===
+    async function requestUserId() {
+      const res = await fetch('/request-user-id', { method: 'POST' });
+      const data = await res.json();
+      appendLog(JSON.stringify(data));
+    }
+
+    document.getElementById('createBotForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fortniteName = document.getElementById('fortniteName').value;
+      const autoAcceptInvites = document.getElementById('autoAcceptInvites').value;
+      const autoAcceptFriends = document.getElementById('autoAcceptFriends').value;
+      const startSkin = document.getElementById('startSkin').value;
+      const joinEmote = document.getElementById('joinEmote').value;
+      const accountLevel = document.getElementById('accountLevel').value;
+
+      const res = await fetch('/create-bot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fortniteName, autoAcceptInvites, autoAcceptFriends, startSkin, joinEmote, accountLevel })
+      });
+      const data = await res.json();
+      appendLog(JSON.stringify(data));
+      closeCreateBotModal();
+    });
+
+    async function loadInbox() {
+      const res = await fetch('/inbox');
+      const messages = await res.json();
+      const container = document.getElementById('inbox-messages');
+      container.innerHTML = '';
+      if (messages.length === 0) {
+        container.innerHTML = '<div class="inbox-message">No messages</div>';
+      } else {
+        messages.forEach(msg => {
+          const div = document.createElement('div');
+          div.className = 'inbox-message';
+          div.textContent = `${msg.date} - ${msg.message}`;
+          container.appendChild(div);
+        });
+      }
+    }
+
+    // === View switching ===
+    function showView(view) {
+      document.querySelectorAll("main section").forEach(s => s.classList.add("hidden"));
+      document.getElementById(view+"-view").classList.remove("hidden");
+      document.querySelectorAll(".nav-item").forEach(i=>i.classList.remove("active"));
+      document.querySelector(`.nav-item[onclick="showView('${view}')"]`).classList.add("active");
+      if (view === 'mybots') updateStatus();
+      if (view === 'public') buildPublicBots();
+      if (view === 'inbox') loadInbox();
+    }
+
+    // === Init ===
+    updateStatus();
+    setInterval(updateStatus, 5000);
+    initLogStream();
+    applyReplacements();
+
+    // === Shutdown overlay polling ===
+    async function checkSiteStatus() {
+      try {
+        const res = await fetch("/site-status");
+        const data = await res.json();
+        const overlay = document.getElementById("shutdownOverlay");
+        if (data.shutdown) {
+          overlay.style.display = "flex";
+        } else {
+          overlay.style.display = "none";
+        }
+      } catch (err) {
+        console.error("Status check failed", err);
+      }
+    }
+    setInterval(checkSiteStatus, 5000);
+    checkSiteStatus();
   </script>
 </body>
 </html>
