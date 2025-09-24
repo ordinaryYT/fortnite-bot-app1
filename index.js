@@ -287,7 +287,7 @@ async function registerCommands() {
       ],
     },
     {
-      name: "prefix command",
+      name: "prefix-command",
       description: "this is currently having issues",
       options: [
         {
