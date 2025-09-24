@@ -94,70 +94,142 @@ client.on("interactionCreate", async (interaction) => {
     }
   };
 
-  // /logs action:on|off
+  // /logs
   if (interaction.commandName === "logs") {
-    try {
-      const hasRole =
-        interaction.member?.roles?.cache?.has(LOGS_ROLE_ID) || false;
-      if (!hasRole) {
-        await interaction.reply({
-          content: "You don't have permission to use this.",
-          ephemeral: true,
-        });
-        return;
-      }
-      const action = interaction.options.getString("action");
-      logsEnabled = action === "on";
-      await interaction.reply(
-        `Logs have been turned ${logsEnabled ? "ON" : "OFF"}`
-      );
-      await logToChannel(
-        `${interaction.user.tag} issued /logs — set to ${logsEnabled ? "ON" : "OFF"}`
-      );
-    } catch (err) {
-      console.error("Interaction /logs error:", err);
+    const hasRole =
+      interaction.member?.roles?.cache?.has(LOGS_ROLE_ID) || false;
+    if (!hasRole) {
+      return interaction.reply({
+        content: "You don't have permission to use this.",
+        ephemeral: true,
+      });
     }
+    const action = interaction.options.getString("action");
+    logsEnabled = action === "on";
+    await interaction.reply(
+      `Logs have been turned ${logsEnabled ? "ON" : "OFF"}`
+    );
+    await logToChannel(
+      `${interaction.user.tag} issued /logs — set to ${
+        logsEnabled ? "ON" : "OFF"
+      }`
+    );
     return;
   }
 
   // /shutdown
   if (interaction.commandName === "shutdown") {
-    try {
-      const hasRole =
-        interaction.member?.roles?.cache?.has(ADMIN_ROLE_ID) || false;
-      if (!hasRole) {
-        await interaction.reply({
-          content: "You don't have permission to use this.",
-          ephemeral: true,
-        });
-        return;
-      }
-      siteShutdown = true;
-      await interaction.reply("The app has been shut down.");
-      await logToChannel(`${interaction.user.tag} issued /shutdown`);
-    } catch (err) {
-      console.error("Interaction /shutdown error:", err);
+    const hasRole =
+      interaction.member?.roles?.cache?.has(ADMIN_ROLE_ID) || false;
+    if (!hasRole) {
+      return interaction.reply({
+        content: "You don't have permission to use this.",
+        ephemeral: true,
+      });
     }
+    siteShutdown = true;
+    await interaction.reply("The app has been shut down.");
+    await logToChannel(`${interaction.user.tag} issued /shutdown`);
     return;
   }
 
   // /turnon
   if (interaction.commandName === "turnon") {
-    try {
-      const hasRole =
-        interaction.member?.roles?.cache?.has(ADMIN_ROLE_ID) || false;
-      if (!hasRole) {
-        await interaction.reply({
-          content: "You don't have permission to use this.",
-          ephemeral: true,
-        });
-        return;
-      }
-      siteShutdown = false;
-      await interaction.reply("The app is back online.");
-      await logToChannel(`${interaction.user.tag} issued /turnon`);
-    } catch (err) {
-      console.error("Interaction /turnon error:", err);
+    const hasRole =
+      interaction.member?.roles?.cache?.has(ADMIN_ROLE_ID) || false;
+    if (!hasRole) {
+      return interaction.reply({
+        content: "You don't have permission to use this.",
+        ephemeral: true,
+      });
+    }
+    siteShutdown = false;
+    await interaction.reply("The app is back online.");
+    await logToChannel(`${interaction.user.tag} issued /turnon`);
+    return;
+  }
+
+  // /start
+  if (interaction.commandName === "start") {
+    const userId = interaction.options.getString("userid");
+    if (!userId) {
+      return interaction.reply({ content: "User ID required", ephemeral: true });
+    }
+    if (categories.length >= MAX_SLOTS) {
+      return interaction.reply("Server full, cannot start new bot.");
+    }
+    if (!categories.includes(userId)) categories.push(userId);
+
+    if (!worker) {
+      await startWorker(process.env.API_TOKEN);
+    } else {
+      await stopWorker();
+      await startWorker(process.env.API_TOKEN);
+    }
+    await interaction.reply(`Started bot for User ID: ${userId}`);
+    return;
+  }
+
+  // /stop
+  if (interaction.commandName === "stop") {
+    const stopped = await stopWorker();
+    await interaction.reply(stopped ? "Worker stopped." : "No worker running.");
+    return;
+  }
+
+  // /execute
+  if (interaction.commandName === "execute") {
+    const cmd = interaction.options.getString("command");
+    commandQueue.push({ id: Date.now(), command: cmd });
+    console.log("Queued command:", cmd);
+    await interaction.reply(`Queued command: \`${cmd}\``);
+    return;
+  }
+
+  // /chat
+  if (interaction.commandName === "chat") {
+    const msg = interaction.options.getString("message");
+    const chatCmd = `CHAT:${msg}`;
+    commandQueue.push({ id: Date.now(), command: chatCmd });
+    console.log("Queued chat command:", chatCmd);
+    await interaction.reply(`Queued chat: \`${msg}\``);
+    return;
+  }
+
+  // /request-user-id
+  if (interaction.commandName === "request-user-id") {
+    const channel = client.channels.cache.get(DISCORD_CHANNEL_ID);
+    if (channel) {
+      channel.send("User requested a user ID via Discord.");
+      await interaction.reply("User ID request sent. It may take up to 24 hours.");
+    } else {
+      await interaction.reply("Error: Discord channel not found.");
+    }
+    return;
+  }
+
+  // /create-bot
+  if (interaction.commandName === "create-bot") {
+    const fortniteName = interaction.options.getString("fortnitename");
+    const autoAcceptInvites = interaction.options.getString("autoacceptinvites");
+    const autoAcceptFriends = interaction.options.getString("autoacceptfriends");
+    const startSkin = interaction.options.getString("startskin") || "";
+    const joinEmote = interaction.options.getString("joinemote") || "";
+    const accountLevel = interaction.options.getInteger("accountlevel") || "";
+
+    const channel = client.channels.cache.get(DISCORD_CHANNEL_ID);
+    if (channel) {
+      const message = `User requested bot creation via Discord:
+Fortnite Name: ${fortniteName}
+Auto Accept Invites: ${autoAcceptInvites}
+Auto Accept Friends: ${autoAcceptFriends}
+Start Skin: ${startSkin}
+Join Emote: ${joinEmote}
+Account Level: ${accountLevel}`;
+      channel.send(message);
+      await interaction.reply("Bot creation request sent. It may take up to 24 hours.");
+    } else {
+      await interaction.reply("Error: Discord channel not found.");
     }
     return;
   }
@@ -176,7 +248,7 @@ async function registerCommands() {
       description: "Turn logs on or off",
       options: [
         {
-          type: 3, // STRING
+          type: 3,
           name: "action",
           description: "on or off",
           required: true,
@@ -189,6 +261,60 @@ async function registerCommands() {
     },
     { name: "shutdown", description: "Shut down the app" },
     { name: "turnon", description: "Bring the app back online" },
+    {
+      name: "start",
+      description: "Start a bot",
+      options: [
+        {
+          type: 3,
+          name: "userid",
+          description: "User ID to start",
+          required: true,
+        },
+      ],
+    },
+    { name: "stop", description: "Stop the bot " },
+    {
+      name: "command",
+      description: "perform a command",
+      options: [
+        {
+          type: 3,
+          name: "command",
+          description: "command the bot runs",
+          required: true,
+        },
+      ],
+    },
+    {
+      name: "prefix command",
+      description: "this is currently having issues",
+      options: [
+        {
+          type: 3,
+          name: "command",
+          description: "command the bot runs",
+          required: true,
+        },
+      ],
+    },
+    { name: "request-user-id", description: "Request a new user ID" },
+    {
+      name: "create-bot",
+      description: "create a new bot",
+      options: [
+        { type: 3, name: "fortnitename", description: "Fortnite name", required: true },
+        { type: 3, name: "autoacceptinvites", description: "yes or no", required: true, choices: [
+          { name: "yes", value: "yes" }, { name: "no", value: "no" }
+        ] },
+        { type: 3, name: "autoacceptfriends", description: "yes or no", required: true, choices: [
+          { name: "yes", value: "yes" }, { name: "no", value: "no" }
+        ] },
+        { type: 3, name: "startskin", description: "Starting skin", required: false },
+        { type: 3, name: "joinemote", description: "Join emote", required: false },
+        { type: 4, name: "accountlevel", description: "Account level (number)", required: false },
+      ],
+    },
   ];
   try {
     await rest.put(Discord.Routes.applicationCommands(client.user.id), {
@@ -218,7 +344,6 @@ function sendToFrontendLogs(rawMessage) {
 
   const messageStr = String(rawMessage);
   
-  // Only send FNLB-related logs
   if (!messageStr.includes("fnlb") && !messageStr.includes("Starting shard") && 
       !messageStr.includes("categories:") && !messageStr.includes("Cluster:")) {
     return;
@@ -231,11 +356,9 @@ function sendToFrontendLogs(rawMessage) {
 
     let clean = line.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "").trim();
 
-    // Clean up FNLB-specific formatting
     clean = clean.replace(/fnlb/gi, "");
     clean = clean.replace(/\[\d{2}:\d{2}:\d{2}\]/g, "").trim();
 
-    // Filter out unwanted patterns (keep only essential FNLB info)
     if (/playlist_/i.test(clean)) continue;
     if (/ua:/i.test(clean)) continue;
     if (/pb:/i.test(clean)) continue;
@@ -243,7 +366,6 @@ function sendToFrontendLogs(rawMessage) {
     if (/netCL/i.test(clean)) continue;
     if (/Connecting \(http/i.test(clean)) continue;
 
-    // Transform FNLB messages to user-friendly format
     clean = clean.replace(
       /Starting shard with ID:\s*(.+)/i,
       "Starting OGbot with ID: $1"
@@ -267,7 +389,7 @@ function sendToFrontendLogs(rawMessage) {
   }
 }
 
-// ---- Hook only FNLB-related console output ----
+// ---- Hook console.log ----
 const originalLog = console.log;
 
 console.log = (...args) => {
@@ -275,7 +397,6 @@ console.log = (...args) => {
     .map((a) => (typeof a === "object" ? JSON.stringify(a) : String(a)))
     .join(" ");
   
-  // Only send FNLB-related logs to frontend
   if (msg.includes("fnlb") || msg.includes("Starting shard") || 
       msg.includes("categories:") || msg.includes("Cluster:")) {
     sendToFrontendLogs(msg);
@@ -284,7 +405,7 @@ console.log = (...args) => {
   originalLog(...args);
 };
 
-// Middleware to check command secret if set
+// Middleware to check command secret
 function checkSecret(req, res, next) {
   if (COMMAND_SECRET) {
     const token = req.headers["x-command-secret"];
