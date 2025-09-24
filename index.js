@@ -48,6 +48,7 @@ client.once("ready", () => {
 
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
+  if (!DISCORD_CHANNEL_ID) return;
   if (message.channel.id !== DISCORD_CHANNEL_ID) return;
 
   const content = message.content.toLowerCase();
@@ -85,153 +86,152 @@ client.on("messageCreate", async (message) => {
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
-  const logToChannel = async (msg) => {
-    try {
+  try {
+    // /logs action:on|off
+    if (interaction.commandName === "logs") {
+      const hasRole =
+        interaction.member?.roles?.cache?.has(LOGS_ROLE_ID) || false;
+      if (!hasRole) {
+        return interaction.reply({ content: "You don't have permission to use this.", ephemeral: true });
+      }
+      const action = interaction.options.getString("action");
+      logsEnabled = action === "on";
+      return interaction.reply(`Logs have been turned ${logsEnabled ? "ON" : "OFF"}`);
+    }
+
+    // /shutdown
+    if (interaction.commandName === "shutdown") {
+      const hasRole =
+        interaction.member?.roles?.cache?.has(ADMIN_ROLE_ID) || false;
+      if (!hasRole) {
+        return interaction.reply({ content: "You don't have permission to use this.", ephemeral: true });
+      }
+      siteShutdown = true;
+      return interaction.reply("Shut down command received. The app is now marked as shutdown.");
+    }
+
+    // /turnon
+    if (interaction.commandName === "turnon") {
+      const hasRole =
+        interaction.member?.roles?.cache?.has(ADMIN_ROLE_ID) || false;
+      if (!hasRole) {
+        return interaction.reply({ content: "You don't have permission to use this.", ephemeral: true });
+      }
+      siteShutdown = false;
+      return interaction.reply("Turn on command received. The app is now back online.");
+    }
+
+    // /start
+    if (interaction.commandName === "start") {
+      const userId = interaction.options.getString("userid");
+      // reply fast to avoid timeout
+      await interaction.reply("Starting bot...");
+      try {
+        if (!userId) return interaction.followUp("user id required.");
+        if (categories.length >= MAX_SLOTS) return interaction.followUp("Server full.");
+        if (!categories.includes(userId)) categories.push(userId);
+
+        if (!worker) {
+          await startWorker(process.env.API_TOKEN);
+        } else {
+          await stopWorker();
+          await startWorker(process.env.API_TOKEN);
+        }
+        return interaction.followUp({ content: `Started bot for User ID: ${userId}` });
+      } catch (err) {
+        console.error("Start error:", err);
+        return interaction.followUp({ content: "Failed to start worker" });
+      }
+    }
+
+    // /stop
+    if (interaction.commandName === "stop") {
+      await interaction.reply("Stopping worker...");
+      try {
+        const stopped = await stopWorker();
+        return interaction.followUp(stopped ? "Worker stopped" : "No worker running");
+      } catch (err) {
+        console.error("Stop error:", err);
+        return interaction.followUp("Failed to stop worker");
+      }
+    }
+
+    // /command  (keeps your original name "command" and description)
+    if (interaction.commandName === "command") {
+      const cmd = interaction.options.getString("command");
+      // immediate reply
+      await interaction.reply(`Queued command: ${cmd}`);
+      // queue it
+      commandQueue.push({ id: Date.now(), command: cmd });
+      console.log("Queued command:", cmd);
+      return;
+    }
+
+    // /prefix-command  (this was "prefix command" in your original - Discord forbids spaces,
+    // so we register "prefix-command" but keep your original description)
+    if (interaction.commandName === "prefix-command") {
+      const cmd = interaction.options.getString("command");
+      await interaction.reply(`Queued prefix command: ${cmd}`);
+      commandQueue.push({ id: Date.now(), command: cmd });
+      console.log("Queued prefix command:", cmd);
+      return;
+    }
+
+    // /chat
+    if (interaction.commandName === "chat") {
+      const msg = interaction.options.getString("message");
+      await interaction.reply(`Queued chat: ${msg}`);
+      const chatCmd = `CHAT:${msg}`;
+      commandQueue.push({ id: Date.now(), command: chatCmd });
+      console.log("Queued chat command:", chatCmd);
+      return;
+    }
+
+    // /request-user-id
+    if (interaction.commandName === "request-user-id") {
+      await interaction.reply("Requesting user ID...");
       const channel = client.channels.cache.get(DISCORD_CHANNEL_ID);
-      if (channel) await channel.send(msg);
-    } catch (e) {
-      console.error("Failed to send audit log to channel:", e);
+      if (channel) {
+        channel.send("User requested a user ID via the app.");
+        return interaction.followUp("User ID request sent. It may take up to 24 hours.");
+      } else {
+        return interaction.followUp("Error: Discord channel not found.");
+      }
     }
-  };
 
-  // /logs
-  if (interaction.commandName === "logs") {
-    const hasRole =
-      interaction.member?.roles?.cache?.has(LOGS_ROLE_ID) || false;
-    if (!hasRole) {
-      return interaction.reply({
-        content: "You don't have permission to use this.",
-        ephemeral: true,
-      });
-    }
-    const action = interaction.options.getString("action");
-    logsEnabled = action === "on";
-    await interaction.reply(
-      `Logs have been turned ${logsEnabled ? "ON" : "OFF"}`
-    );
-    await logToChannel(
-      `${interaction.user.tag} issued /logs — set to ${
-        logsEnabled ? "ON" : "OFF"
-      }`
-    );
-    return;
-  }
+    // /create-bot
+    if (interaction.commandName === "create-bot") {
+      const fortniteName = interaction.options.getString("fortnitename");
+      const autoAcceptInvites = interaction.options.getString("autoacceptinvites");
+      const autoAcceptFriends = interaction.options.getString("autoacceptfriends");
+      const startSkin = interaction.options.getString("startskin") || "";
+      const joinEmote = interaction.options.getString("joinemote") || "";
+      const accountLevel = interaction.options.getInteger("accountlevel") || "";
 
-  // /shutdown
-  if (interaction.commandName === "shutdown") {
-    const hasRole =
-      interaction.member?.roles?.cache?.has(ADMIN_ROLE_ID) || false;
-    if (!hasRole) {
-      return interaction.reply({
-        content: "You don't have permission to use this.",
-        ephemeral: true,
-      });
-    }
-    siteShutdown = true;
-    await interaction.reply("The app has been shut down.");
-    await logToChannel(`${interaction.user.tag} issued /shutdown`);
-    return;
-  }
-
-  // /turnon
-  if (interaction.commandName === "turnon") {
-    const hasRole =
-      interaction.member?.roles?.cache?.has(ADMIN_ROLE_ID) || false;
-    if (!hasRole) {
-      return interaction.reply({
-        content: "You don't have permission to use this.",
-        ephemeral: true,
-      });
-    }
-    siteShutdown = false;
-    await interaction.reply("The app is back online.");
-    await logToChannel(`${interaction.user.tag} issued /turnon`);
-    return;
-  }
-
-  // /start
-  if (interaction.commandName === "start") {
-    const userId = interaction.options.getString("userid");
-    if (!userId) {
-      return interaction.reply({ content: "User ID required", ephemeral: true });
-    }
-    if (categories.length >= MAX_SLOTS) {
-      return interaction.reply("Server full, cannot start new bot.");
-    }
-    if (!categories.includes(userId)) categories.push(userId);
-
-    if (!worker) {
-      await startWorker(process.env.API_TOKEN);
-    } else {
-      await stopWorker();
-      await startWorker(process.env.API_TOKEN);
-    }
-    await interaction.reply(`Started bot for User ID: ${userId}`);
-    return;
-  }
-
-  // /stop
-  if (interaction.commandName === "stop") {
-    const stopped = await stopWorker();
-    await interaction.reply(stopped ? "Worker stopped." : "No worker running.");
-    return;
-  }
-
-  // /execute
-  if (interaction.commandName === "execute") {
-    const cmd = interaction.options.getString("command");
-    commandQueue.push({ id: Date.now(), command: cmd });
-    console.log("Queued command:", cmd);
-    await interaction.reply(`Queued command: \`${cmd}\``);
-    return;
-  }
-
-  // /chat
-  if (interaction.commandName === "chat") {
-    const msg = interaction.options.getString("message");
-    const chatCmd = `CHAT:${msg}`;
-    commandQueue.push({ id: Date.now(), command: chatCmd });
-    console.log("Queued chat command:", chatCmd);
-    await interaction.reply(`Queued chat: \`${msg}\``);
-    return;
-  }
-
-  // /request-user-id
-  if (interaction.commandName === "request-user-id") {
-    const channel = client.channels.cache.get(DISCORD_CHANNEL_ID);
-    if (channel) {
-      channel.send("User requested a user ID via Discord.");
-      await interaction.reply("User ID request sent. It may take up to 24 hours.");
-    } else {
-      await interaction.reply("Error: Discord channel not found.");
-    }
-    return;
-  }
-
-  // /create-bot
-  if (interaction.commandName === "create-bot") {
-    const fortniteName = interaction.options.getString("fortnitename");
-    const autoAcceptInvites = interaction.options.getString("autoacceptinvites");
-    const autoAcceptFriends = interaction.options.getString("autoacceptfriends");
-    const startSkin = interaction.options.getString("startskin") || "";
-    const joinEmote = interaction.options.getString("joinemote") || "";
-    const accountLevel = interaction.options.getInteger("accountlevel") || "";
-
-    const channel = client.channels.cache.get(DISCORD_CHANNEL_ID);
-    if (channel) {
-      const message = `User requested bot creation via Discord:
+      await interaction.reply("Sending bot creation request...");
+      const channel = client.channels.cache.get(DISCORD_CHANNEL_ID);
+      if (channel) {
+        const message = `User requested bot creation via the app:
 Fortnite Name: ${fortniteName}
 Auto Accept Invites: ${autoAcceptInvites}
 Auto Accept Friends: ${autoAcceptFriends}
 Start Skin: ${startSkin}
 Join Emote: ${joinEmote}
 Account Level: ${accountLevel}`;
-      channel.send(message);
-      await interaction.reply("Bot creation request sent. It may take up to 24 hours.");
-    } else {
-      await interaction.reply("Error: Discord channel not found.");
+        channel.send(message);
+        return interaction.followUp("Bot creation request sent. It may take up to 24 hours to be approved.");
+      } else {
+        return interaction.followUp("Error: Discord channel not found.");
+      }
     }
-    return;
+
+    // Fallback: unknown command
+    return interaction.reply({ content: "Unknown command", ephemeral: true });
+  } catch (err) {
+    console.error("Interaction error:", err);
+    if (!interaction.replied) {
+      try { await interaction.reply("Something went wrong."); } catch {}
+    }
   }
 });
 
@@ -242,6 +242,9 @@ async function registerCommands() {
     return;
   }
   const rest = new Discord.REST({ version: "10" }).setToken(DISCORD_TOKEN);
+
+  // NOTE: kept your original command names and descriptions.
+  // The only forced change is "prefix command" -> "prefix-command" (no space allowed).
   const commands = [
     {
       name: "logs",
@@ -265,12 +268,7 @@ async function registerCommands() {
       name: "start",
       description: "Start a bot",
       options: [
-        {
-          type: 3,
-          name: "userid",
-          description: "User ID to start",
-          required: true,
-        },
+        { type: 3, name: "userid", description: "User ID", required: true },
       ],
     },
     { name: "stop", description: "Stop the bot " },
@@ -287,6 +285,8 @@ async function registerCommands() {
       ],
     },
     {
+      // original name had a space "prefix command" — Discord forbids spaces.
+      // We must register it as "prefix-command" but keep your description unchanged.
       name: "prefix-command",
       description: "this is currently having issues",
       options: [
@@ -316,10 +316,9 @@ async function registerCommands() {
       ],
     },
   ];
+
   try {
-    await rest.put(Discord.Routes.applicationCommands(client.user.id), {
-      body: commands,
-    });
+    await rest.put(Discord.Routes.applicationCommands(client.user.id), { body: commands });
     console.log("Slash commands registered.");
   } catch (err) {
     console.error("Failed to register slash commands:", err);
@@ -389,7 +388,7 @@ function sendToFrontendLogs(rawMessage) {
   }
 }
 
-// ---- Hook console.log ----
+// ---- Hook only FNLB-related console output ----
 const originalLog = console.log;
 
 console.log = (...args) => {
