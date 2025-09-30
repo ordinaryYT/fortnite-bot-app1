@@ -75,7 +75,7 @@ async function registerCommands() {
   const commands = [
     {
       name: "command",
-      description: "Send a command to AutoHotkey",
+      description: "Send a command",
       options: [
         {
           type: 3,
